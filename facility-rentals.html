@@ -1,5 +1,6 @@
 <!--
 CHANGELOG (newest first)
+v1.2.2 - Added Main Building Classroom and Main Building Nursery as separate spaces (not part of the Family Life Center); saved data is updated automatically.
 v1.2.1 - Classrooms named (A Clothing Room, B Sunday School Room, C Teen Room, D Classroom), FLC conference room removed, plain conference room now means the main building conference room.
 v1.2.0 - FLC events now need rooms named in parentheses (Classroom A to D, Gym, Kitchen, Conference Room), bare FLC goes to Needs Attention, all day and exact hours shown everywhere, series option for repeating events, All day checkbox for entered bookings.
 v1.1.0 - Adds FLC and room words for matching, hides calendar events with no room word, and can add, change or remove bookings on the church Google Calendar through an Apps Script link.
@@ -154,7 +155,9 @@ const DEFAULT_SPACES = [
   { id: 'classD', name: 'Classroom D (Classroom)', parent: 'flc', keywords: '' },
   { id: 'kitchen', name: 'Kitchen (Family Life Center)', parent: 'flc', keywords: 'kitchen' },
   { id: 'sanctuary', name: 'Sanctuary', parent: '', keywords: 'sanctuary' },
-  { id: 'mainconf', name: 'Conference Room (Main Building)', parent: '', keywords: 'main conference, main building conference' }
+  { id: 'mainconf', name: 'Conference Room (Main Building)', parent: '', keywords: 'main conference, main building conference' },
+  { id: 'mainclass', name: 'Main Building Classroom', parent: '', keywords: 'main building classroom, main classroom' },
+  { id: 'nursery', name: 'Main Building Nursery', parent: '', keywords: 'nursery' }
 ];
 
 /* ---------- Helpers ---------- */
@@ -220,6 +223,7 @@ function normalize(d) {
     Object.values(d.calMeta).forEach(m => { if (m && Array.isArray(m.spaces)) m.spaces = drop(m.spaces); });
     Object.values(d.calSeries).forEach(m => { if (m && Array.isArray(m.spaces)) m.spaces = drop(m.spaces); });
   }
+  DEFAULT_SPACES.filter(x => x.id === 'mainclass' || x.id === 'nursery').forEach(x => { if (!d.spaces.some(s => s.id === x.id)) d.spaces.push(clone(x)); });
   const flc = d.spaces.find(s => s.id === 'flc');
   if (flc && /^(flc, family life center|whole family life center, entire family life center, entire flc)$/i.test((flc.keywords || '').trim())) flc.keywords = '';
   return d;
@@ -332,6 +336,7 @@ function autoMatch(e) {
   const flc = /\bflc\b|family life/.test(t);
   const whole = /(flc|family life center)\s*\(?\s*(whole|entire|all rooms|all areas|everything)/.test(t) || /\b(whole|entire)\s+(flc|family life|building)/.test(t);
   for (const cm of t.matchAll(/class\s?rooms?\b/g)) {
+    if (/\bmain(\s+building)?\s*$/.test(t.slice(0, cm.index))) continue;
     const letters = parseLetters(t.slice(cm.index + cm[0].length));
     if (letters.length) letters.forEach(L => ids.add('class' + L)); else amb = true;
   }
