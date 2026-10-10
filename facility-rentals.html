@@ -1,5 +1,7 @@
 <!--
 CHANGELOG (newest first)
+v1.2.1 - Classrooms named (A Clothing Room, B Sunday School Room, C Teen Room, D Classroom), FLC conference room removed, plain conference room now means the main building conference room.
+v1.2.0 - FLC events now need rooms named in parentheses (Classroom A to D, Gym, Kitchen, Conference Room), bare FLC goes to Needs Attention, all day and exact hours shown everywhere, series option for repeating events, All day checkbox for entered bookings.
 v1.1.0 - Adds FLC and room words for matching, hides calendar events with no room word, and can add, change or remove bookings on the church Google Calendar through an Apps Script link.
 v1.0.0 - First build: space board, week grid, list, attention tab, Google Calendar read, double booking warnings, check offs, four editors, JSONBin saving.
 -->
@@ -51,6 +53,8 @@ h2.sec{font-size:1.05rem;color:var(--purple);margin:18px 0 8px}
 .st.free{background:#DDF3E4;color:var(--green)}
 .st.busy{background:#FBE3E1;color:var(--red)}
 .st.part{background:#FFF0C2;color:var(--amber)}
+.when{font-weight:700;margin:8px 0 2px}
+.when.sub{font-weight:400;font-size:.92rem;color:var(--gray)}
 .use{border-top:1px dashed var(--line);margin-top:8px;padding-top:6px;font-size:.88rem;cursor:pointer}
 .use small{color:var(--gray)}
 .pill{display:inline-block;font-size:.72rem;font-weight:700;border-radius:10px;padding:1px 8px;border:1px solid}
@@ -142,11 +146,13 @@ const CHECKS = [
   { k: 'kitchen', l: 'Kitchen cleaned', only: 'kitchen' }
 ];
 const DEFAULT_SPACES = [
-  { id: 'flc', name: 'Family Life Center (whole building)', parent: '', keywords: 'flc, family life center' },
+  { id: 'flc', name: 'Family Life Center (whole building)', parent: '', keywords: '' },
   { id: 'gym', name: 'Gym', parent: 'flc', keywords: 'gym, gymnasium' },
-  { id: 'classrooms', name: 'Classrooms', parent: 'flc', keywords: 'classroom, classrooms, class room' },
+  { id: 'classA', name: 'Classroom A (Clothing Room)', parent: 'flc', keywords: 'clothing room' },
+  { id: 'classB', name: 'Classroom B (Sunday School Room)', parent: 'flc', keywords: 'sunday school room' },
+  { id: 'classC', name: 'Classroom C (Teen Room)', parent: 'flc', keywords: 'teen room' },
+  { id: 'classD', name: 'Classroom D (Classroom)', parent: 'flc', keywords: '' },
   { id: 'kitchen', name: 'Kitchen (Family Life Center)', parent: 'flc', keywords: 'kitchen' },
-  { id: 'flcconf', name: 'Conference Room (Family Life Center)', parent: 'flc', keywords: 'flc conference, family life conference' },
   { id: 'sanctuary', name: 'Sanctuary', parent: '', keywords: 'sanctuary' },
   { id: 'mainconf', name: 'Conference Room (Main Building)', parent: '', keywords: 'main conference, main building conference' }
 ];
@@ -165,7 +171,8 @@ const fmtDate = d => d.toLocaleDateString(undefined, { weekday: 'short', month: 
 const fmtLong = d => d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 const clone = o => JSON.parse(JSON.stringify(o));
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-function timeRange(i) { return i.allDay ? 'All day' : fmtTime(i.start) + ' to ' + fmtTime(i.end); }
+function isAllDay(i) { return i.allDay || (hhmm(i.start) === '00:00' && (hhmm(i.end) === '23:59' || hhmm(i.end) === '00:00')); }
+function timeRange(i) { return isAllDay(i) ? 'All day' : fmtTime(i.start) + ' to ' + fmtTime(i.end); }
 
 /* ---------- State ---------- */
 const S = {
@@ -194,6 +201,27 @@ function normalize(d) {
   if (!Array.isArray(d.bookings)) d.bookings = [];
   if (!d.calMeta || typeof d.calMeta !== 'object') d.calMeta = {};
   if (!Array.isArray(d.editors)) d.editors = [];
+  if (!d.calSeries || typeof d.calSeries !== 'object') d.calSeries = {};
+  /* upgrade older saved data: one Classrooms space becomes Classroom A to D */
+  if (d.spaces.some(s => s.id === 'classrooms') && !d.spaces.some(s => s.id === 'classA')) {
+    const all = ['classA', 'classB', 'classC', 'classD'];
+    const i = d.spaces.findIndex(s => s.id === 'classrooms'), par = d.spaces[i].parent;
+    d.spaces.splice(i, 1, ...['A', 'B', 'C', 'D'].map(L => ({ id: 'class' + L, name: 'Classroom ' + L, parent: par, keywords: '' })));
+    const fix = a => [].concat(...a.map(x => x === 'classrooms' ? all : [x]));
+    d.bookings.forEach(b => { if (Array.isArray(b.spaces)) b.spaces = fix(b.spaces); });
+    Object.values(d.calMeta).forEach(m => { if (m && Array.isArray(m.spaces)) m.spaces = fix(m.spaces); });
+  }
+  const nm = { classA: ['Classroom A (Clothing Room)', 'clothing room'], classB: ['Classroom B (Sunday School Room)', 'sunday school room'], classC: ['Classroom C (Teen Room)', 'teen room'], classD: ['Classroom D (Classroom)', ''] };
+  d.spaces.forEach(s => { const n = nm[s.id]; if (n && /^Classroom [A-D]$/.test(s.name)) { s.name = n[0]; s.keywords = n[1]; } });
+  if (d.spaces.some(s => s.id === 'flcconf')) {
+    d.spaces = d.spaces.filter(s => s.id !== 'flcconf');
+    const drop = a => a.filter(x => x !== 'flcconf');
+    d.bookings.forEach(b => { if (Array.isArray(b.spaces)) b.spaces = drop(b.spaces); });
+    Object.values(d.calMeta).forEach(m => { if (m && Array.isArray(m.spaces)) m.spaces = drop(m.spaces); });
+    Object.values(d.calSeries).forEach(m => { if (m && Array.isArray(m.spaces)) m.spaces = drop(m.spaces); });
+  }
+  const flc = d.spaces.find(s => s.id === 'flc');
+  if (flc && /^(flc, family life center|whole family life center, entire family life center, entire flc)$/i.test((flc.keywords || '').trim())) flc.keywords = '';
   return d;
 }
 async function loadData() {
@@ -237,7 +265,7 @@ function mapEvent(e) {
   const allDay = !!(e.start && e.start.date && !e.start.dateTime);
   const start = allDay ? parseYmd(e.start.date) : new Date(e.start.dateTime);
   const end = allDay ? parseYmd(e.end.date) : new Date(e.end.dateTime);
-  return { id: e.id, title: e.summary || '(No title)', location: e.location || '', desc: e.description || '', start, end, allDay, link: e.htmlLink || '' };
+  return { id: e.id, rid: e.recurringEventId || '', title: e.summary || '(No title)', location: e.location || '', desc: e.description || '', start, end, allDay, link: e.htmlLink || '' };
 }
 async function loadCal(from, to) {
   const c = cfg();
@@ -286,11 +314,33 @@ function spaceList() {
   return out;
 }
 const kw = s => (s.keywords || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+function parseLetters(str) {
+  str = str.replace(/^[\s:]*/, '');
+  let m = str.match(/^([a-d])\s*(?:-|to|through|thru)\s*([a-d])\b/);
+  if (m) { const a = m[1].charCodeAt(0), b = m[2].charCodeAt(0), out = []; for (let c = Math.min(a, b); c <= Math.max(a, b); c++) out.push(String.fromCharCode(c).toUpperCase()); return out; }
+  m = str.match(/^([a-d](?![a-z])(?:\s*(?:,|&|\+|\/|and)?\s*[a-d](?![a-z]))*)/);
+  if (!m) return [];
+  return [...new Set(m[1].replace(/and/g, ' ').toUpperCase().match(/[A-D]/g))];
+}
+/* Reads room names out of a calendar event. Returns the rooms found, and amb = true when the event
+   names the FLC, classrooms or a conference room without saying which rooms. */
 function autoMatch(e) {
   const t = (e.title + ' ' + e.location + ' ' + e.desc).toLowerCase();
-  let ids = S.data.spaces.filter(s => kw(s).some(k => t.includes(k))).map(s => s.id);
-  /* if a specific room is named, do not also assume the whole building */
-  return ids.filter(id => !S.data.spaces.some(c => c.parent === id && ids.includes(c.id)));
+  const special = new Set(['flc']);
+  const ids = new Set(S.data.spaces.filter(s => !special.has(s.id) && kw(s).some(k => t.includes(k))).map(s => s.id));
+  let amb = false;
+  const flc = /\bflc\b|family life/.test(t);
+  const whole = /(flc|family life center)\s*\(?\s*(whole|entire|all rooms|all areas|everything)/.test(t) || /\b(whole|entire)\s+(flc|family life|building)/.test(t);
+  for (const cm of t.matchAll(/class\s?rooms?\b/g)) {
+    const letters = parseLetters(t.slice(cm.index + cm[0].length));
+    if (letters.length) letters.forEach(L => ids.add('class' + L)); else amb = true;
+  }
+  if (/conference/.test(t) && !ids.has('mainconf')) {
+    if (spaceById('mainconf')) ids.add('mainconf'); else amb = true;
+  }
+  if (flc && whole) { [...ids].forEach(i => { if (ancestors(i).includes('flc')) ids.delete(i); }); ids.add('flc'); }
+  else if (flc && ids.size === 0) amb = true;
+  return { ids: [...ids], amb };
 }
 const writeOn = () => { const c = cfg(); return !!(c.writeUrl && c.writeSecret); };
 async function calWrite(payload) {
@@ -314,13 +364,15 @@ function buildItems() {
   for (const e of S.cal) {
     if (linked.has(e.id.split('@')[0])) continue;
     const m = S.data.calMeta[e.id] || {};
-    const has = Array.isArray(m.spaces);
-    const spaces = (has ? m.spaces : autoMatch(e)).filter(spaceById);
-    const amb = !has && !spaces.length && /conference/i.test(e.title + ' ' + e.location + ' ' + e.desc);
-    if (!has && !spaces.length && !amb) continue; /* no room word: not a space booking, so not imported */
-    items.push({ key: 'c:' + e.id, source: 'cal', id: e.id, title: e.title, start: e.start, end: e.end, allDay: e.allDay, link: e.link,
-      location: e.location, spaces, auto: !has && spaces.length > 0, status: m.status || 'Confirmed', checks: m.checks || {}, notes: m.notes || '',
-      needsSpace: amb });
+    const ser = e.rid ? (S.data.calSeries || {})[e.rid] : null;
+    const own = Array.isArray(m.spaces);
+    const given = own ? m.spaces : (ser && Array.isArray(ser.spaces) ? ser.spaces : null);
+    let spaces, auto = false, amb = false;
+    if (given) spaces = given.filter(spaceById);
+    else { const r = autoMatch(e); spaces = r.ids.filter(spaceById); amb = r.amb; auto = spaces.length > 0 && !amb; }
+    if (!given && !spaces.length && !amb) continue; /* no room words: not a space booking, so not shown */
+    items.push({ key: 'c:' + e.id, source: 'cal', id: e.id, rid: e.rid, ownSpaces: own, title: e.title, start: e.start, end: e.end, allDay: e.allDay, link: e.link,
+      location: e.location, spaces, auto, status: m.status || 'Confirmed', checks: m.checks || {}, notes: m.notes || '', needsSpace: amb });
   }
   return items.filter(i => !isNaN(i.start) && !isNaN(i.end));
 }
@@ -433,6 +485,8 @@ function renderBoard() {
       ' <span class="pill ' + i.status + '">' + i.status + '</span><br><small>' +
       (i.spaces.includes(s.id) ? '' : (anc.some(a => i.spaces.includes(a)) ? 'Whole building booked. ' : 'Using: ' + esc(spaceNames(i.spaces)) + '. ')) + progress(i) + '</small></div>';
     return '<div class="tile ' + cls + '"><h3>' + esc(s.name) + '</h3><span class="st ' + (cls || 'free') + '">' + lab + '</span>' +
+      (direct.length ? '<div class="when">Booked: ' + direct.slice().sort((x, y) => x.start - y.start).map(timeRange).join('; ') + '</div>' : '') +
+      (part.length ? '<div class="when sub">Rooms in use: ' + part.slice().sort((x, y) => x.start - y.start).map(i => timeRange(i) + ' (' + esc(spaceNames(i.spaces.filter(x => ancestors(x).includes(s.id)))) + ')').join('; ') + '</div>' : '') +
       direct.map(lst).join('') + part.map(lst).join('') +
       (S.editor ? '<div style="margin-top:8px"><button class="btn small" data-act="new" data-space="' + s.id + '">Book this space</button></div>' : '') + '</div>';
   }).join('');
@@ -455,7 +509,7 @@ function renderWeek() {
       const on = S.items.filter(i => i.status !== 'Cancelled' && i.start < d2 && i.end > d && i.spaces.length)
         .sort((a, b) => a.start - b.start);
       const chip = (i, inh) => '<span class="chip ' + i.status + (inh ? ' inh' : '') + (S.cmap[i.key] ? ' clash' : '') + '" data-act="open" data-key="' + esc(i.key) + '"><b>' +
-        (i.allDay ? 'All day' : fmtTime(i.start)) + (inh ? ' (whole bldg)' : '') + '</b>' + esc(i.title) + '</span>';
+        timeRange(i) + (inh ? ' (whole bldg)' : '') + '</b>' + esc(i.title) + '</span>';
       const own = on.filter(i => i.spaces.includes(s.id)).map(i => chip(i, false));
       const inh = on.filter(i => !i.spaces.includes(s.id) && i.spaces.some(x => anc.includes(x))).map(i => chip(i, true));
       return '<td class="day ' + (S.editor ? 'ed' : '') + '"' + (S.editor ? ' data-act="new" data-space="' + s.id + '" data-date="' + ymd(d) + '"' : '') + '>' + own.join('') + inh.join('') + '</td>';
@@ -471,7 +525,7 @@ function itemRow(i) {
   const c = S.cmap[i.key];
   return '<div class="row" data-act="open" data-key="' + esc(i.key) + '"><div class="t">' + timeRange(i).replace(' to ', '<br>to ') + '</div><div class="m"><b>' + esc(i.title) + '</b> <span class="pill ' + i.status + '">' + i.status + '</span>' +
     (c ? ' <span class="pill clash">Double booked</span>' : '') +
-    '<small>' + (i.spaces.length ? esc(spaceNames(i.spaces)) : 'No space assigned') + (i.source === 'cal' ? ' | From church calendar' : ' | Entered here' + (writeOn() ? (i.calId ? ' and on church calendar' : ' | Not on church calendar yet') : '')) + (i.auto ? ' | space matched automatically' : '') + ' | ' + progress(i) + '</small></div></div>';
+    '<small>' + (i.needsSpace ? '<b style="color:var(--red)">Rooms needed. </b>' : '') + (i.spaces.length ? esc(spaceNames(i.spaces)) : 'No rooms chosen yet') + (i.source === 'cal' ? ' | From church calendar' : ' | Entered here' + (writeOn() ? (i.calId ? ' and on church calendar' : ' | Not on church calendar yet') : '')) + (i.auto ? ' | space matched automatically' : '') + ' | ' + progress(i) + '</small></div></div>';
 }
 function renderList() {
   const today = sod(new Date());
@@ -509,7 +563,7 @@ function renderAttn() {
   h += conf.length ? conf.map(c => '<div class="card"><b style="color:var(--red)">' + esc(c.text) + '</b><div class="note">' + fmtDate(c.a.start) + '</div>' +
     [c.a, c.b].map(i => '<div class="row" data-act="open" data-key="' + esc(i.key) + '"><div class="t">' + timeRange(i).replace(' to ', '<br>to ') + '</div><div class="m"><b>' + esc(i.title) + '</b> <span class="pill ' + i.status + '">' + i.status + '</span><small>' + esc(spaceNames(i.spaces)) + (i.source === 'cal' ? ' | From church calendar' : ' | Entered here') + '</small></div></div>').join('') + '</div>').join('')
     : '<div class="card empty">No double bookings found. </div>';
-  h += '<h2 class="sec">Calendar events that need a space (' + need.length + ')</h2><div class="note" style="margin-bottom:6px">These came from the church calendar and mention a room, such as a conference room, but the app cannot tell which one. Open one and tick the space, or leave all unticked if it does not use any of these rooms.</div>';
+  h += '<h2 class="sec">Calendar events that need rooms chosen (' + need.length + ')</h2><div class="note" style="margin-bottom:6px">These came from the church calendar and say FLC or classrooms without saying which rooms. Add the rooms in parentheses on the calendar, such as FLC (Gym &amp; Kitchen) or FLC (Classroom A, B), or open one here and tick the rooms.</div>';
   h += need.length ? '<div class="card">' + need.slice(0, 80).map(itemRow).join('') + '</div>' : '<div class="card empty">Every calendar event is sorted.</div>';
   h += '<h2 class="sec">Requests waiting for approval (' + wait.length + ')</h2>';
   h += wait.length ? '<div class="card">' + wait.map(itemRow).join('') + '</div>' : '<div class="card empty">No requests are waiting.</div>';
@@ -543,7 +597,7 @@ function openItem(key, preset) {
   let v;
   if (it) v = { title: it.title, contact: it.contact || '', date: ymd(it.start), start: hhmm(it.start), end: hhmm(it.end), spaces: it.spaces.slice(), status: it.status, checks: it.checks, notes: it.notes };
   else v = { title: '', contact: '', date: preset.date || ymd(S.date), start: preset.start || '09:00', end: preset.end || '10:00', spaces: preset.space ? [preset.space] : [], status: 'Requested', checks: {}, notes: '' };
-  FORM = { key: key || '', src, ack: false, id: it ? it.id : '' };
+  FORM = { key: key || '', src, ack: false, id: it ? it.id : '', rid: it ? it.rid || '' : '' };
   let h = '<div class="mh"><h2>' + (it ? esc(it.title) : 'New booking') + '</h2><button class="btn small" data-act="closeModal">Close</button></div><div class="mb" data-form="1">';
   if (src === 'cal') {
     h += '<p class="note">This event comes from the church Google Calendar. Change its title or time in Google Calendar. Here you can set the space, status and check offs.' +
@@ -553,11 +607,13 @@ function openItem(key, preset) {
     h += (writeOn() ? '<p class="note">' + (it && it.calId ? 'This booking is on the church calendar. Saving updates it there too.' : 'Saving adds this booking to the church calendar.') + '</p>' : '') +
       '<label>Event or renter name<input id="f_title" value="' + esc(v.title) + '"' + dis + '></label>' +
       '<label>Contact (name, phone or email)<input id="f_contact" value="' + esc(v.contact) + '"' + dis + '></label>' +
+      '<label class="chk"><input type="checkbox" id="f_allday"' + (it && isAllDay(it) ? ' checked' : '') + dis + '> All day</label>' +
       '<div class="r3"><label>Date<input type="date" id="f_date" value="' + v.date + '"' + dis + '></label><label>Start<input type="time" id="f_start" value="' + v.start + '"' + dis + '></label><label>End<input type="time" id="f_end" value="' + v.end + '"' + dis + '></label></div>';
   }
   h += '<label>Status<select id="f_status"' + dis + '>' + STATUSES.map(s => '<option' + (v.status === s ? ' selected' : '') + '>' + s + '</option>').join('') + '</select></label>' +
     '<fieldset><legend>Spaces used</legend>' + spaceChecks(v.spaces, dis) +
-    (src === 'cal' ? '<div class="note">' + (it.auto ? 'These were matched automatically from the event wording. Confirm or change them. ' : '') + 'Leave all unticked if this event does not use any of these spaces.</div>' : '') + '</fieldset>' +
+    (src === 'cal' ? '<div class="note">' + (it.needsSpace ? '<b>This event says FLC or classrooms without naming the rooms.</b> Tick the rooms it uses, or tick Family Life Center (whole building). ' : '') + (it.auto ? 'Rooms were read from the event wording. Confirm or change them. ' : '') + 'Leave all unticked if this event does not use any of these spaces.</div>' +
+    (it.rid ? '<label class="chk"><input type="checkbox" id="f_series"' + (it.ownSpaces ? '' : ' checked') + dis + '> Use these rooms for every date in this repeating event</label>' : '') : '') + '</fieldset>' +
     '<div id="f_conf"></div>' +
     '<fieldset><legend>Check off</legend>' + CHECKS.map(c => '<label class="chk" data-ck="' + c.k + '"' + (c.only ? ' data-only="' + c.only + '"' : '') + '><input type="checkbox" id="ck_' + c.k + '"' + (v.checks[c.k] ? ' checked' : '') + dis + '> ' + esc(c.l) + '</label>').join('') + '</fieldset>' +
     '<label>Notes<textarea id="f_notes"' + dis + '>' + esc(v.notes) + '</textarea></label>';
@@ -572,7 +628,7 @@ function openItem(key, preset) {
 function gather() {
   const g = { spaces: [...document.querySelectorAll('input[name="sp"]:checked')].map(x => x.value), status: $('f_status').value, notes: $('f_notes').value, checks: {} };
   CHECKS.forEach(c => { if ($('ck_' + c.k).checked) g.checks[c.k] = true; });
-  if (FORM.src === 'app') { g.title = $('f_title').value.trim(); g.contact = $('f_contact').value.trim(); g.date = $('f_date').value; g.start = $('f_start').value; g.end = $('f_end').value; }
+  if (FORM.src === 'app') { if ($('f_allday').checked) { $('f_start').value = '00:00'; $('f_end').value = '23:59'; } g.title = $('f_title').value.trim(); g.contact = $('f_contact').value.trim(); g.date = $('f_date').value; g.start = $('f_start').value; g.end = $('f_end').value; }
   return g;
 }
 function tempItem(g) {
@@ -584,6 +640,8 @@ function tempItem(g) {
 function formChanged() {
   if (!FORM) return;
   FORM.ack = false;
+  const ad = $('f_allday');
+  if (ad) { $('f_start').disabled = ad.checked || !S.editor; $('f_end').disabled = ad.checked || !S.editor; }
   const g = gather();
   document.querySelectorAll('[data-only]').forEach(l => { l.style.display = g.spaces.includes(l.dataset.only) ? '' : 'none'; });
   const t = tempItem(g);
@@ -612,7 +670,8 @@ async function saveItem() {
     $('f_conf').scrollIntoView({ block: 'center', behavior: 'smooth' });
     return toast('This is a double booking. Tap the red button again to save it anyway.');
   }
-  const who = S.editor, id = FORM.id, src = FORM.src;
+  const who = S.editor, id = FORM.id, src = FORM.src, rid = FORM.rid;
+  const useSeries = !!(rid && $('f_series') && $('f_series').checked);
   let calId = null, calMsg = '';
   if (src === 'app' && writeOn()) {
     const old = id ? S.data.bookings.find(b => b.id === id) : null;
@@ -636,7 +695,10 @@ async function saveItem() {
         if (ex) Object.assign(ex, rec, { updatedBy: who, updated: Date.now() });
         else d.bookings.push({ id: id || 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), ...rec, createdBy: who, created: Date.now() });
       } else {
-        d.calMeta[id] = { spaces: g.spaces, status: g.status, checks: g.checks, notes: g.notes, updatedBy: who, updated: Date.now() };
+        const meta = { status: g.status, checks: g.checks, notes: g.notes, updatedBy: who, updated: Date.now() };
+        if (useSeries) { d.calSeries = d.calSeries || {}; d.calSeries[rid] = { spaces: g.spaces, updatedBy: who, updated: Date.now() }; }
+        else meta.spaces = g.spaces;
+        d.calMeta[id] = meta;
       }
     });
     closeModal(); toast(calMsg ? 'Saved here, but the church calendar was not updated: ' + calMsg : 'Saved');
