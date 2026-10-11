@@ -1,5 +1,7 @@
 <!--
 CHANGELOG (newest first)
+v1.3.1 - Save button locks while saving, so a double tap no longer creates two bookings.
+v1.3.0 - Email alerts: editors can set the alert email list in Settings; the calendar bridge (v1.1.0) emails when rooms are added, changed or deleted, and the app tells it who entered each booking.
 v1.2.2 - Added Main Building Classroom and Main Building Nursery as separate spaces (not part of the Family Life Center); saved data is updated automatically.
 v1.2.1 - Classrooms named (A Clothing Room, B Sunday School Room, C Teen Room, D Classroom), FLC conference room removed, plain conference room now means the main building conference room.
 v1.2.0 - FLC events now need rooms named in parentheses (Classroom A to D, Gym, Kitchen, Conference Room), bare FLC goes to Needs Attention, all day and exact hours shown everywhere, series option for repeating events, All day checkbox for entered bookings.
@@ -350,7 +352,7 @@ function autoMatch(e) {
 const writeOn = () => { const c = cfg(); return !!(c.writeUrl && c.writeSecret); };
 async function calWrite(payload) {
   const c = cfg();
-  const r = await fetch(c.writeUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...payload, secret: c.writeSecret }) });
+  const r = await fetch(c.writeUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...payload, by: S.editor || '', secret: c.writeSecret }) });
   const j = await r.json();
   if (!j.ok) throw new Error(j.error || 'Calendar update failed');
   return j;
@@ -662,7 +664,14 @@ function formChanged() {
   const b = $('saveBtn');
   if (b) { b.textContent = cf.length ? 'Save anyway (double booking)' : 'Save'; b.className = 'btn ' + (cf.length ? 'dangerfill' : 'primary'); }
 }
+let SAVING = false;
 async function saveItem() {
+  if (SAVING) return;
+  SAVING = true;
+  const b = $('saveBtn'); if (b) { b.disabled = true; b.dataset.t = b.textContent; b.textContent = 'Saving...'; }
+  try { await saveItemRun(); } finally { SAVING = false; const b2 = $('saveBtn'); if (b2) { b2.disabled = false; if (b2.textContent === 'Saving...') b2.textContent = b2.dataset.t || 'Save'; } }
+}
+async function saveItemRun() {
   const g = gather();
   if (FORM.src === 'app') {
     if (!g.title) return toast('Please enter an event or renter name.');
@@ -778,10 +787,12 @@ function openSettings() {
   if (ed) {
     h += '<fieldset><legend>Spaces</legend><div id="splist"></div><button class="btn small" data-act="spAdd">Add a space</button> <button class="btn primary small" data-act="spSave">Save spaces</button>' +
       '<p class="note">Keywords help the app match calendar events to a space. If an event title, location or description contains a keyword, that space is filled in for you. Put a space under a parent (such as the Family Life Center) so booking the whole building also blocks everything inside it.</p></fieldset>' +
+      (writeOn() ? '<fieldset><legend>Email alerts</legend><label>Send an email to these addresses when a room is booked, changed or deleted (separate with commas)<textarea id="c_em" rows="2" placeholder="Loading..." autocomplete="off"></textarea></label><button class="btn primary small" data-act="emSave">Save email list</button><p class="note">Alerts cover changes made in this app and changes made directly in Google Calendar.</p></fieldset>' : '') +
       '<fieldset><legend>Editors</legend><button class="btn" data-act="edOpen">Manage editors</button></fieldset>';
   } else h += '<p class="note">Sign in as an editor to change spaces and editors.</p>';
   showModal(h + '</div>');
   if (ed) drawSpaces();
+  if (ed && writeOn() && $('c_em')) calWrite({ action: 'getRecipients' }).then(r => { if ($('c_em')) $('c_em').value = r.emails || ''; }).catch(e => { if ($('c_em')) $('c_em').placeholder = 'Could not load: ' + e.message; });
 }
 function drawSpaces() {
   $('splist').innerHTML = SPLIST.map((s, i) => '<div class="sprow"><input data-sp="name" data-i="' + i + '" value="' + esc(s.name) + '" placeholder="Space name"><select data-sp="parent" data-i="' + i + '"><option value="">Top level</option>' +
@@ -818,6 +829,7 @@ const ACT = {
     list.forEach(s => { if (s.parent && !list.some(p => p.id === s.parent)) s.parent = ''; });
     try { await mutate(d => { d.spaces = list; }); closeModal(); toast('Spaces saved'); } catch (e) {}
   },
+  emSave: async () => { try { const r = await calWrite({ action: 'setRecipients', emails: $('c_em').value.trim() }); $('c_em').value = r.emails || ''; toast('Email list saved'); } catch (e) { toast('Could not save: ' + e.message); } },
   saveCfg: () => {
     const o = { binId: $('c_bin').value.trim(), masterKey: $('c_key').value.trim(), calendarId: $('c_cal').value.trim(), calApiKey: $('c_gk').value.trim(), writeUrl: $('c_wu').value.trim(), writeSecret: $('c_ws').value.trim() };
     try { localStorage.setItem('fr_cfg', JSON.stringify(o)); } catch (e) {}
