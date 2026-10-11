@@ -1,5 +1,6 @@
 <!--
 CHANGELOG (newest first)
+v1.3.2 - Family Life Center tile on the Space Board now shows only whole-building bookings, not single room bookings.
 v1.3.1 - Save button locks while saving, so a double tap no longer creates two bookings.
 v1.3.0 - Email alerts: editors can set the alert email list in Settings; the calendar bridge (v1.1.0) emails when rooms are added, changed or deleted, and the app tells it who entered each booking.
 v1.2.2 - Added Main Building Classroom and Main Building Nursery as separate spaces (not part of the Family Life Center); saved data is updated automatically.
@@ -485,7 +486,7 @@ function renderBoard() {
   const tiles = spaceList().map(s => {
     const anc = ancestors(s.id);
     const direct = inWin.filter(i => i.spaces.some(x => x === s.id || anc.includes(x)));
-    const part = inWin.filter(i => !direct.includes(i) && i.spaces.some(x => ancestors(x).includes(s.id)));
+    const part = []; /* the whole-building tile only reports whole-building bookings, not single rooms */
     const cls = direct.length ? 'busy' : part.length ? 'part' : '';
     const lab = direct.length ? 'Booked' : part.length ? 'Partly in use' : 'Free';
     const lst = i => '<div class="use" data-act="open" data-key="' + esc(i.key) + '"><b>' + timeRange(i) + '</b> ' + esc(i.title) +
@@ -499,7 +500,7 @@ function renderBoard() {
   }).join('');
   return dateNav('<label>From<input type="time" data-bind="bStart" value="' + S.bStart + '"></label><label>To<input type="time" data-bind="bEnd" value="' + S.bEnd + '"></label>') +
     '<h2 class="sec" style="margin-top:0">' + fmtLong(S.date) + (S.bStart === '00:00' && S.bEnd === '23:59' ? ' (whole day)' : ' (' + fmtTime(win[0]) + ' to ' + fmtTime(win[1]) + ')') + '</h2>' +
-    '<div class="legend">Green is free, yellow means part of the building is in use, red means booked. Pick a time window above to check one event. Cancelled bookings do not block a space.</div>' +
+    '<div class="legend">Green is free, red means booked. The Family Life Center tile shows only whole-building bookings; room bookings show on their own tiles. Pick a time window above to check one event. Cancelled bookings do not block a space.</div>' +
     '<div class="tiles">' + tiles + '</div>';
 }
 
