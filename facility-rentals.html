@@ -1,5 +1,7 @@
 <!--
 CHANGELOG (newest first)
+v1.4.0 - New event details on every booking: name of organization, event type, contact person, cell number, number of tables. Shown in the list and sent to the church calendar description.
+v1.3.3 - A booking whose event was deleted directly in Google Calendar now disappears from the app (hidden for everyone, removed from saved data when an editor has the app open). Calendar re-checked every 2 minutes.
 v1.3.2 - Family Life Center tile on the Space Board now shows only whole-building bookings, not single room bookings.
 v1.3.1 - Save button locks while saving, so a double tap no longer creates two bookings.
 v1.3.0 - Email alerts: editors can set the alert email list in Settings; the calendar bridge (v1.1.0) emails when rooms are added, changed or deleted, and the app tells it who entered each booking.
@@ -98,6 +100,7 @@ table.wk td.day.ed{cursor:cell}
 .mb label>input,.mb label>select,.mb label>textarea{margin-top:3px;color:var(--navy)}
 .mf{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--line)}
 .r3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.info{display:block;color:var(--muted,#3F3F3F);font-size:12px;margin-top:2px}
 .r2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 fieldset{border:1px solid var(--line);border-radius:8px;margin:0 0 12px;padding:8px 12px}
 legend{color:var(--purple);font-weight:700;font-size:.85rem;padding:0 6px}
@@ -361,11 +364,30 @@ async function calWrite(payload) {
 const spaceNames = ids => ids.map(i => spaceById(i)).filter(Boolean).map(s => s.name).join(', ');
 
 /* ---------- Items and conflicts ---------- */
+/* An app booking that has a church calendar event, but whose event is no longer on the calendar, was deleted from Google Calendar. */
+function goneFromCal(b) {
+  if (!b.calEventId || !S.calOn || S.calErr || !S.calRange) return false;
+  if (Date.now() - (b.updated || b.created || 0) < 180000) return false;
+  const st = combine(b.date, b.start);
+  if (isNaN(st) || st < S.calRange.from || st >= S.calRange.to) return false;
+  const cid = String(b.calEventId).split('@')[0];
+  return !S.cal.some(e => String(e.id).split('@')[0] === cid);
+}
+let PURGING = false;
+async function purgeGone() {
+  if (PURGING || S.busy || !S.editor || S.loadErr) return;
+  const ids = S.data.bookings.filter(goneFromCal).map(b => b.id);
+  if (!ids.length) return;
+  PURGING = true;
+  try { await mutate(d => { d.bookings = d.bookings.filter(b => !ids.includes(b.id)); }); toast(ids.length + ' booking' + (ids.length > 1 ? 's were' : ' was') + ' removed because the event was deleted from the church calendar.'); } catch (e) {}
+  PURGING = false;
+}
 function buildItems() {
   const items = [];
   for (const b of S.data.bookings) {
+    if (goneFromCal(b)) continue;
     const start = combine(b.date, b.start), end = combine(b.date, b.end);
-    items.push({ key: 'a:' + b.id, source: 'app', id: b.id, title: b.title, contact: b.contact || '', start, end, allDay: false,
+    items.push({ key: 'a:' + b.id, source: 'app', id: b.id, title: b.title, contact: b.contact || '', phone: b.phone || '', etype: b.etype || '', org: b.org || '', tables: b.tables || '', start, end, allDay: false,
       spaces: (b.spaces || []).filter(spaceById), calId: b.calEventId || '', status: b.status || 'Requested', checks: b.checks || {}, notes: b.notes || '', needsSpace: false });
   }
   const linked = new Set(S.data.bookings.filter(b => b.calEventId).map(b => String(b.calEventId).split('@')[0]));
@@ -379,7 +401,7 @@ function buildItems() {
     if (given) spaces = given.filter(spaceById);
     else { const r = autoMatch(e); spaces = r.ids.filter(spaceById); amb = r.amb; auto = spaces.length > 0 && !amb; }
     if (!given && !spaces.length && !amb) continue; /* no room words: not a space booking, so not shown */
-    items.push({ key: 'c:' + e.id, source: 'cal', id: e.id, rid: e.rid, ownSpaces: own, title: e.title, start: e.start, end: e.end, allDay: e.allDay, link: e.link,
+    items.push({ key: 'c:' + e.id, source: 'cal', contact: m.contact || '', phone: m.phone || '', etype: m.etype || '', org: m.org || '', tables: m.tables || '', id: e.id, rid: e.rid, ownSpaces: own, title: e.title, start: e.start, end: e.end, allDay: e.allDay, link: e.link,
       location: e.location, spaces, auto, status: m.status || 'Confirmed', checks: m.checks || {}, notes: m.notes || '', needsSpace: amb });
   }
   return items.filter(i => !isNaN(i.start) && !isNaN(i.end));
@@ -490,7 +512,7 @@ function renderBoard() {
     const cls = direct.length ? 'busy' : part.length ? 'part' : '';
     const lab = direct.length ? 'Booked' : part.length ? 'Partly in use' : 'Free';
     const lst = i => '<div class="use" data-act="open" data-key="' + esc(i.key) + '"><b>' + timeRange(i) + '</b> ' + esc(i.title) +
-      ' <span class="pill ' + i.status + '">' + i.status + '</span><br><small>' +
+      ' <span class="pill ' + i.status + '">' + i.status + '</span>' + infoLine(i) + '<br><small>' +
       (i.spaces.includes(s.id) ? '' : (anc.some(a => i.spaces.includes(a)) ? 'Whole building booked. ' : 'Using: ' + esc(spaceNames(i.spaces)) + '. ')) + progress(i) + '</small></div>';
     return '<div class="tile ' + cls + '"><h3>' + esc(s.name) + '</h3><span class="st ' + (cls || 'free') + '">' + lab + '</span>' +
       (direct.length ? '<div class="when">Booked: ' + direct.slice().sort((x, y) => x.start - y.start).map(timeRange).join('; ') + '</div>' : '') +
@@ -529,10 +551,14 @@ function renderWeek() {
 }
 
 /* List */
+function infoLine(i) {
+  const bits = [i.org, i.etype, i.tables ? i.tables + ' table' + (String(i.tables) === '1' ? '' : 's') : '', [i.contact, i.phone].filter(Boolean).join(' ')].filter(Boolean);
+  return bits.length ? '<small class="info">' + bits.map(esc).join(' | ') + '</small>' : '';
+}
 function itemRow(i) {
   const c = S.cmap[i.key];
   return '<div class="row" data-act="open" data-key="' + esc(i.key) + '"><div class="t">' + timeRange(i).replace(' to ', '<br>to ') + '</div><div class="m"><b>' + esc(i.title) + '</b> <span class="pill ' + i.status + '">' + i.status + '</span>' +
-    (c ? ' <span class="pill clash">Double booked</span>' : '') +
+    (c ? ' <span class="pill clash">Double booked</span>' : '') + infoLine(i) +
     '<small>' + (i.needsSpace ? '<b style="color:var(--red)">Rooms needed. </b>' : '') + (i.spaces.length ? esc(spaceNames(i.spaces)) : 'No rooms chosen yet') + (i.source === 'cal' ? ' | From church calendar' : ' | Entered here' + (writeOn() ? (i.calId ? ' and on church calendar' : ' | Not on church calendar yet') : '')) + (i.auto ? ' | space matched automatically' : '') + ' | ' + progress(i) + '</small></div></div>';
 }
 function renderList() {
@@ -603,8 +629,8 @@ function openItem(key, preset) {
   const ed = !!S.editor, dis = ed ? '' : ' disabled';
   const src = it ? it.source : 'app';
   let v;
-  if (it) v = { title: it.title, contact: it.contact || '', date: ymd(it.start), start: hhmm(it.start), end: hhmm(it.end), spaces: it.spaces.slice(), status: it.status, checks: it.checks, notes: it.notes };
-  else v = { title: '', contact: '', date: preset.date || ymd(S.date), start: preset.start || '09:00', end: preset.end || '10:00', spaces: preset.space ? [preset.space] : [], status: 'Requested', checks: {}, notes: '' };
+  if (it) v = { title: it.title, contact: it.contact || '', phone: it.phone || '', etype: it.etype || '', org: it.org || '', tables: it.tables || '', date: ymd(it.start), start: hhmm(it.start), end: hhmm(it.end), spaces: it.spaces.slice(), status: it.status, checks: it.checks, notes: it.notes };
+  else v = { title: '', contact: '', phone: '', etype: '', org: '', tables: '', date: preset.date || ymd(S.date), start: preset.start || '09:00', end: preset.end || '10:00', spaces: preset.space ? [preset.space] : [], status: 'Requested', checks: {}, notes: '' };
   FORM = { key: key || '', src, ack: false, id: it ? it.id : '', rid: it ? it.rid || '' : '' };
   let h = '<div class="mh"><h2>' + (it ? esc(it.title) : 'New booking') + '</h2><button class="btn small" data-act="closeModal">Close</button></div><div class="mb" data-form="1">';
   if (src === 'cal') {
@@ -614,11 +640,17 @@ function openItem(key, preset) {
   } else {
     h += (writeOn() ? '<p class="note">' + (it && it.calId ? 'This booking is on the church calendar. Saving updates it there too.' : 'Saving adds this booking to the church calendar.') + '</p>' : '') +
       '<label>Event or renter name<input id="f_title" value="' + esc(v.title) + '"' + dis + '></label>' +
-      '<label>Contact (name, phone or email)<input id="f_contact" value="' + esc(v.contact) + '"' + dis + '></label>' +
       '<label class="chk"><input type="checkbox" id="f_allday"' + (it && isAllDay(it) ? ' checked' : '') + dis + '> All day</label>' +
       '<div class="r3"><label>Date<input type="date" id="f_date" value="' + v.date + '"' + dis + '></label><label>Start<input type="time" id="f_start" value="' + v.start + '"' + dis + '></label><label>End<input type="time" id="f_end" value="' + v.end + '"' + dis + '></label></div>';
   }
-  h += '<label>Status<select id="f_status"' + dis + '>' + STATUSES.map(s => '<option' + (v.status === s ? ' selected' : '') + '>' + s + '</option>').join('') + '</select></label>' +
+  h += '<fieldset><legend>Event details</legend>' +
+    '<label>Name of organization<input id="f_org" value="' + esc(v.org) + '"' + dis + ' autocomplete="off"></label>' +
+    '<label>Event type<input id="f_etype" list="etypes" value="' + esc(v.etype) + '"' + dis + ' autocomplete="off" placeholder="Pick one or type your own"></label>' +
+    '<datalist id="etypes"><option>Wedding</option><option>Reception</option><option>Birthday party</option><option>Baby or bridal shower</option><option>Repast</option><option>Family reunion</option><option>Meeting</option><option>Class or training</option><option>Sports or recreation</option><option>Church event</option><option>Community event</option></datalist>' +
+    '<div class="r2"><label>Contact person<input id="f_contact" value="' + esc(v.contact) + '"' + dis + ' autocomplete="off"></label>' +
+    '<label>Cell number<input id="f_phone" type="tel" value="' + esc(v.phone) + '"' + dis + ' autocomplete="off"></label></div>' +
+    '<label>Number of tables<input id="f_tables" type="number" min="0" inputmode="numeric" value="' + esc(v.tables) + '"' + dis + '></label></fieldset>' +
+    '<label>Status<select id="f_status"' + dis + '>' + STATUSES.map(s => '<option' + (v.status === s ? ' selected' : '') + '>' + s + '</option>').join('') + '</select></label>' +
     '<fieldset><legend>Spaces used</legend>' + spaceChecks(v.spaces, dis) +
     (src === 'cal' ? '<div class="note">' + (it.needsSpace ? '<b>This event says FLC or classrooms without naming the rooms.</b> Tick the rooms it uses, or tick Family Life Center (whole building). ' : '') + (it.auto ? 'Rooms were read from the event wording. Confirm or change them. ' : '') + 'Leave all unticked if this event does not use any of these spaces.</div>' +
     (it.rid ? '<label class="chk"><input type="checkbox" id="f_series"' + (it.ownSpaces ? '' : ' checked') + dis + '> Use these rooms for every date in this repeating event</label>' : '') : '') + '</fieldset>' +
@@ -636,7 +668,8 @@ function openItem(key, preset) {
 function gather() {
   const g = { spaces: [...document.querySelectorAll('input[name="sp"]:checked')].map(x => x.value), status: $('f_status').value, notes: $('f_notes').value, checks: {} };
   CHECKS.forEach(c => { if ($('ck_' + c.k).checked) g.checks[c.k] = true; });
-  if (FORM.src === 'app') { if ($('f_allday').checked) { $('f_start').value = '00:00'; $('f_end').value = '23:59'; } g.title = $('f_title').value.trim(); g.contact = $('f_contact').value.trim(); g.date = $('f_date').value; g.start = $('f_start').value; g.end = $('f_end').value; }
+  g.contact = $('f_contact').value.trim(); g.phone = $('f_phone').value.trim(); g.etype = $('f_etype').value.trim(); g.org = $('f_org').value.trim(); g.tables = $('f_tables').value.trim();
+  if (FORM.src === 'app') { if ($('f_allday').checked) { $('f_start').value = '00:00'; $('f_end').value = '23:59'; } g.title = $('f_title').value.trim(); g.date = $('f_date').value; g.start = $('f_start').value; g.end = $('f_end').value; }
   return g;
 }
 function tempItem(g) {
@@ -695,7 +728,7 @@ async function saveItemRun() {
       if (g.status === 'Cancelled') { if (calId) { await calWrite({ action: 'delete', id: calId }); calId = ''; } }
       else {
         const pl = { title: g.title, start: combine(g.date, g.start).toISOString(), end: combine(g.date, g.end).toISOString(), location: spaceNames(g.spaces),
-          description: [g.contact ? 'Contact: ' + g.contact : '', g.notes, 'Entered in Facility Rentals by ' + who].filter(Boolean).join('\n') };
+          description: [g.org ? 'Organization: ' + g.org : '', g.etype ? 'Event type: ' + g.etype : '', (g.contact || g.phone) ? 'Contact: ' + [g.contact, g.phone].filter(Boolean).join(', ') : '', g.tables ? 'Tables: ' + g.tables : '', g.notes, 'Entered in Facility Rentals by ' + who].filter(Boolean).join('\n') };
         const r = await calWrite({ action: calId ? 'update' : 'create', id: calId, ...pl });
         calId = r.id || calId;
       }
@@ -704,13 +737,13 @@ async function saveItemRun() {
   try {
     await mutate(d => {
       if (src === 'app') {
-        const rec = { title: g.title, contact: g.contact, date: g.date, start: g.start, end: g.end, spaces: g.spaces, status: g.status, checks: g.checks, notes: g.notes };
+        const rec = { title: g.title, contact: g.contact, phone: g.phone, etype: g.etype, org: g.org, tables: g.tables, date: g.date, start: g.start, end: g.end, spaces: g.spaces, status: g.status, checks: g.checks, notes: g.notes };
         if (calId !== null) rec.calEventId = calId;
         const ex = id ? d.bookings.find(b => b.id === id) : null;
         if (ex) Object.assign(ex, rec, { updatedBy: who, updated: Date.now() });
         else d.bookings.push({ id: id || 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), ...rec, createdBy: who, created: Date.now() });
       } else {
-        const meta = { status: g.status, checks: g.checks, notes: g.notes, updatedBy: who, updated: Date.now() };
+        const meta = { status: g.status, checks: g.checks, notes: g.notes, contact: g.contact, phone: g.phone, etype: g.etype, org: g.org, tables: g.tables, updatedBy: who, updated: Date.now() };
         if (useSeries) { d.calSeries = d.calSeries || {}; d.calSeries[rid] = { spaces: g.spaces, updatedBy: who, updated: Date.now() }; }
         else meta.spaces = g.spaces;
         d.calMeta[id] = meta;
@@ -811,7 +844,7 @@ const ACT = {
   today: async () => { S.date = sod(new Date()); await ensureCal(); render(); },
   open: d => openItem(d.key),
   new: (d, el, ev) => { if (!S.editor) return; if (ev.target.closest('.chip')) return; openItem('', { space: d.space, date: d.date, start: S.view === 'board' && S.bStart !== '00:00' ? S.bStart : '', end: S.view === 'board' && S.bEnd !== '23:59' ? S.bEnd : '' }); },
-  refresh: async () => { toast('Refreshing...'); try { S.data = await loadData(); S.loadErr = ''; } catch (e) { S.loadErr = e.message; } await ensureCal(true); render(); },
+  refresh: async () => { toast('Refreshing...'); try { S.data = await loadData(); S.loadErr = ''; } catch (e) { S.loadErr = e.message; } await ensureCal(true); render(); purgeGone(); },
   signin: openSignIn, doSignIn, signout: signOut,
   settings: openSettings, closeModal,
   ovclick: (d, el, ev) => { if (ev.target === el) closeModal(); },
@@ -864,13 +897,13 @@ async function init() {
   renderChrome();
   try { S.data = await loadData(); } catch (e) { S.loadErr = e.message + '. Check Settings, and remember saved data only loads from your github.io page, not inside Claude.'; S.data = normalize(null); }
   try { await ensureCal(true); } catch (e) { S.calErr = 'Calendar problem: ' + e.message; }
-  render();
+  render(); purgeGone();
   setInterval(async () => {
     if ($('modalRoot').innerHTML || S.busy) return;
     try { S.data = await loadData(); S.loadErr = ''; } catch (e) {}
-    render();
+    render(); purgeGone();
   }, 60000);
-  setInterval(async () => { if ($('modalRoot').innerHTML) return; try { await ensureCal(true); } catch (e) {} render(); }, 300000);
+  setInterval(async () => { if ($('modalRoot').innerHTML) return; try { await ensureCal(true); } catch (e) {} render(); purgeGone(); }, 120000);
 }
 init();
 </script>
