@@ -1,5 +1,8 @@
 <!--
 CHANGELOG (newest first)
+v1.6.0 - Fancier look: arched header motif with copper accent, at a glance counts above the room tiles, glossy buttons, status dots, one gentle entrance animation on opening.
+v1.5.1 - Phone home screen fix: setup link that carries the connections to a phone, and editor sign-in is remembered on the device until you sign out.
+v1.5.0 - New look: serif headings, colored status band and a daily hours bar on every room tile, softer cards, clearer buttons and forms. No change to how anything works.
 v1.4.0 - New event details on every booking: name of organization, event type, contact person, cell number, number of tables. Shown in the list and sent to the church calendar description.
 v1.3.3 - A booking whose event was deleted directly in Google Calendar now disappears from the app (hidden for everyone, removed from saved data when an editor has the app open). Calendar re-checked every 2 minutes.
 v1.3.2 - Family Life Center tile on the Space Board now shows only whole-building bookings, not single room bookings.
@@ -122,6 +125,109 @@ label.chk input{width:auto;margin:0;transform:scale(1.2)}
  .row{flex-direction:column;gap:2px}
  table.wk td.sp,table.wk th.sp{width:110px}
 }
+
+/* v1.5 polish */
+:root{--serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;--shadow:0 1px 2px rgba(65,9,66,.06),0 6px 18px -8px rgba(65,9,66,.18);--ink2:#5b5766}
+body{background:linear-gradient(180deg,#F1EAF5 0,#F7F4F9 220px) no-repeat,#F7F4F9;letter-spacing:.005em}
+header.top{background:linear-gradient(135deg,#410942 0,#2d0a38 100%);padding:16px 20px;border-bottom:3px solid var(--copper)}
+header.top h1{font-family:var(--serif);font-size:1.6rem;font-weight:600;letter-spacing:.01em}
+header.top .sub{font-size:.85rem;margin-top:2px}
+.btn{border-radius:10px;padding:9px 16px;transition:background .15s,box-shadow .15s}
+.btn:hover{background:#EAF4FF}
+.btn.primary:hover{background:#0074DC}
+.btn.light:hover{background:rgba(255,255,255,.12)}
+.btn:focus-visible,nav.tabs button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.row:focus-visible{outline:3px solid #7DBBFF;outline-offset:2px}
+nav.tabs{background:#fff;box-shadow:0 1px 0 var(--line);padding:0 12px;position:sticky;top:0;z-index:20}
+nav.tabs button{padding:14px 16px;font-size:.98rem}
+nav.tabs button:hover{color:var(--purple)}
+nav.tabs button.on{color:var(--purple);border-bottom-color:var(--copper)}
+main{padding:22px 20px}
+.controls{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow)}
+.controls .btn{height:38px}
+h2.sec{font-family:var(--serif);font-size:1.5rem;font-weight:600;color:var(--purple);margin:20px 0 4px}
+.legend{font-size:.85rem;color:var(--ink2);margin:0 0 14px;max-width:70ch}
+.tiles{gap:16px;grid-template-columns:repeat(auto-fill,minmax(270px,1fr))}
+.tile{border:1px solid var(--line);border-left:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow);position:relative;overflow:hidden;background:#fff}
+.tile::before{content:"";position:absolute;left:0;top:0;right:0;height:5px;background:var(--green)}
+.tile.busy::before{background:var(--red)}
+.tile.part::before{background:#E0A100}
+.tile.busy{border-left-color:var(--line)}
+.tile.part{border-left-color:var(--line)}
+.tile h3{font-family:var(--serif);font-size:1.18rem;font-weight:600;line-height:1.2;margin:4px 0 8px}
+.st{font-size:.8rem;padding:3px 11px}
+.tl{margin:12px 0 4px}
+.tlbar{position:relative;height:10px;border-radius:6px;background:#E6F3EA;overflow:hidden}
+.tlbar i{position:absolute;top:0;bottom:0;background:var(--red);min-width:4px;border-radius:2px;opacity:.9}
+.tlbar b{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.9)}
+.tllab{display:flex;justify-content:space-between;font-size:.68rem;color:var(--ink2);margin-top:3px}
+.when{margin:10px 0 2px;font-size:.95rem}
+.use{border-top:1px solid var(--line);margin-top:10px;padding-top:8px;font-size:.9rem;border-radius:0}
+.use:hover{background:#FBF8FC}
+.pill{font-size:.72rem;padding:1px 9px}
+.card{border-radius:14px;box-shadow:var(--shadow);padding:6px 16px}
+.dayh{font-family:var(--serif);font-size:1.1rem;background:transparent;color:var(--purple);padding:4px 2px;margin:22px 0 6px;border-bottom:2px solid var(--lav);border-radius:0}
+.row{padding:14px 0}
+.row:hover{background:#FBF8FC}
+.row .t{font-family:var(--serif);font-size:1rem;min-width:104px;line-height:1.25}
+.row .m b{font-size:1.02rem}
+.row .m small{margin-top:2px}
+.info{color:var(--ink2);font-size:.82rem;margin-top:3px}
+.wkwrap{border-radius:14px;box-shadow:var(--shadow)}
+table.wk th{background:#F1E3F7}
+.chip{border-radius:6px}
+.modal{border-radius:16px;box-shadow:0 20px 60px -10px rgba(16,21,43,.45);max-width:720px}
+.mh{background:linear-gradient(135deg,#410942,#2d0a38);border-radius:16px 16px 0 0;border-bottom:3px solid var(--copper)}
+.mh h2{font-family:var(--serif);color:#fff;font-size:1.3rem;font-weight:600}
+.mh .btn{background:transparent;color:#fff;border-color:rgba(255,255,255,.5)}
+.mh .btn:hover{background:rgba(255,255,255,.12)}
+.mb{padding:18px 20px}
+.mb label{font-weight:600}
+input,select,textarea{border-radius:10px;padding:10px;border-color:#c9bdd0}
+input:focus,select:focus,textarea:focus{border-color:var(--blue)}
+fieldset{border-radius:12px;padding:10px 14px 6px;background:#FCFAFD}
+legend{font-family:var(--serif);font-size:1rem;color:var(--purple)}
+.mf{padding:14px 20px;background:#FCFAFD;border-radius:0 0 16px 16px}
+.toast{border-radius:14px;box-shadow:var(--shadow)}
+@media(max-width:640px){
+ header.top h1{font-size:1.3rem}
+ main{padding:12px}
+ .tiles{gap:12px}
+ .mb{padding:14px}
+ .row .t{min-width:0}
+ .row .t br{display:none}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* v1.6 fancier */
+header.top{background:radial-gradient(900px 220px at 85% -40%,rgba(169,93,77,.35),transparent 70%),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='46' height='70' viewBox='0 0 46 70'%3E%3Cpath d='M6 70V30C6 16 14 7 23 2c9 5 17 14 17 28v40' fill='none' stroke='%23E9BFF5' stroke-width='1.2' opacity='.35'/%3E%3Cpath d='M13 70V32c0-9 4-16 10-21 6 5 10 12 10 21v38' fill='none' stroke='%23A95D4D' stroke-width='1' opacity='.45'/%3E%3C/svg%3E") repeat-x right bottom/46px 70px,linear-gradient(135deg,#410942 0,#2a0a37 100%);padding:20px 22px 24px;position:relative}
+header.top h1{font-size:1.85rem;letter-spacing:.005em;text-shadow:0 1px 0 rgba(0,0,0,.25)}
+header.top .sub{color:var(--lav);font-size:.9rem;margin-top:3px}
+header.top .sub::before{content:"";display:inline-block;width:26px;height:2px;background:var(--copper);vertical-align:middle;margin-right:9px}
+header.top .sub:empty::before{display:none}
+.hbtns .btn{backdrop-filter:blur(2px)}
+.glance{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0 0 18px}
+.glance div{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px 16px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.glance div::after{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--green)}
+.glance .g-busy::after{background:var(--red)}
+.glance .g-ev::after{background:var(--copper)}
+.glance b{display:block;font-family:var(--serif);font-size:2.1rem;line-height:1;color:var(--purple);font-weight:600}
+.glance span{font-size:.85rem;color:var(--ink2)}
+.tile{background:linear-gradient(180deg,#fff 0,#FDFBFE 100%)}
+.tile h3{padding-top:2px}
+.tlbar{height:12px;border-radius:8px;box-shadow:inset 0 0 0 1px rgba(27,127,59,.15)}
+.tlbar i{border-radius:3px;background:linear-gradient(180deg,#C93A32,#A8261F)}
+.st{box-shadow:inset 0 0 0 1px rgba(0,0,0,.05)}
+.st.free::before,.st.busy::before,.st.part::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;margin-right:6px;vertical-align:1px}
+.btn.primary{background:linear-gradient(180deg,#1A97FF,#0079EA);box-shadow:0 2px 6px -2px rgba(0,134,255,.6);border-color:#0079EA}
+nav.tabs{box-shadow:0 2px 10px -6px rgba(65,9,66,.4)}
+nav.tabs button.on{background:linear-gradient(180deg,transparent 60%,rgba(233,191,245,.35))}
+@keyframes riseIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+body.intro .glance div,body.intro .tile{animation:riseIn .5s ease both}
+body.intro .glance div:nth-child(2){animation-delay:.06s}
+body.intro .glance div:nth-child(3){animation-delay:.12s}
+body.intro .tile:nth-child(1){animation-delay:.15s}body.intro .tile:nth-child(2){animation-delay:.2s}body.intro .tile:nth-child(3){animation-delay:.25s}body.intro .tile:nth-child(4){animation-delay:.3s}body.intro .tile:nth-child(n+5){animation-delay:.35s}
+@media(max-width:640px){.glance{gap:8px}.glance div{padding:10px 12px}.glance b{font-size:1.6rem}header.top h1{font-size:1.45rem}header.top{padding:16px 14px 20px}}
+@media(prefers-reduced-motion:reduce){body.intro .glance div,body.intro .tile{animation:none}}
 </style>
 </head>
 <body>
@@ -191,7 +297,17 @@ const S = {
   fSpace: '', fStatus: '', fRange: '30',
   items: [], conf: [], cmap: {}, local: false, busy: false
 };
-try { S.editor = sessionStorage.getItem('fr_editor') || null; } catch (e) {}
+/* Setup link: opening the page with #setup=... fills in the connections on this device (used for phone home screen apps) */
+try {
+  const m = /[#&]setup=([^&]+)/.exec(location.hash || '');
+  if (m) {
+    const inc = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1])))));
+    const cur = JSON.parse(localStorage.getItem('fr_cfg') || '{}');
+    ['binId', 'masterKey', 'calendarId', 'calApiKey', 'writeUrl', 'writeSecret'].forEach(k => { if (inc[k]) cur[k] = inc[k]; });
+    localStorage.setItem('fr_cfg', JSON.stringify(cur));
+  }
+} catch (e) {}
+try { S.editor = localStorage.getItem('fr_editor') || sessionStorage.getItem('fr_editor') || null; } catch (e) {}
 
 function cfg() {
   let o = {};
@@ -514,7 +630,11 @@ function renderBoard() {
     const lst = i => '<div class="use" data-act="open" data-key="' + esc(i.key) + '"><b>' + timeRange(i) + '</b> ' + esc(i.title) +
       ' <span class="pill ' + i.status + '">' + i.status + '</span>' + infoLine(i) + '<br><small>' +
       (i.spaces.includes(s.id) ? '' : (anc.some(a => i.spaces.includes(a)) ? 'Whole building booked. ' : 'Using: ' + esc(spaceNames(i.spaces)) + '. ')) + progress(i) + '</small></div>';
-    return '<div class="tile ' + cls + '"><h3>' + esc(s.name) + '</h3><span class="st ' + (cls || 'free') + '">' + lab + '</span>' +
+    const tl0 = combine(ymd(S.date), '06:00'), tl1 = combine(ymd(S.date), '23:00'), span = tl1 - tl0;
+    const segs = direct.map(i => { const a = Math.max(i.start, tl0), b = Math.min(i.end, tl1); return b > a ? '<i style="left:' + ((a - tl0) / span * 100).toFixed(2) + '%;width:' + ((b - a) / span * 100).toFixed(2) + '%"></i>' : ''; }).join('');
+    const ticks = [6, 9, 12, 15, 18, 21].map(h => '<b style="left:' + ((h - 6) / 17 * 100).toFixed(2) + '%"></b>').join('');
+    const bar = '<div class="tl"><div class="tlbar" role="img" aria-label="Hours booked today">' + segs + ticks + '</div><div class="tllab"><span>6 AM</span><span>Noon</span><span>6 PM</span><span>11 PM</span></div></div>';
+    return '<div class="tile ' + cls + '"><h3>' + esc(s.name) + '</h3><span class="st ' + (cls || 'free') + '">' + lab + '</span>' + bar +
       (direct.length ? '<div class="when">Booked: ' + direct.slice().sort((x, y) => x.start - y.start).map(timeRange).join('; ') + '</div>' : '') +
       (part.length ? '<div class="when sub">Rooms in use: ' + part.slice().sort((x, y) => x.start - y.start).map(i => timeRange(i) + ' (' + esc(spaceNames(i.spaces.filter(x => ancestors(x).includes(s.id)))) + ')').join('; ') + '</div>' : '') +
       direct.map(lst).join('') + part.map(lst).join('') +
@@ -523,7 +643,13 @@ function renderBoard() {
   return dateNav('<label>From<input type="time" data-bind="bStart" value="' + S.bStart + '"></label><label>To<input type="time" data-bind="bEnd" value="' + S.bEnd + '"></label>') +
     '<h2 class="sec" style="margin-top:0">' + fmtLong(S.date) + (S.bStart === '00:00' && S.bEnd === '23:59' ? ' (whole day)' : ' (' + fmtTime(win[0]) + ' to ' + fmtTime(win[1]) + ')') + '</h2>' +
     '<div class="legend">Green is free, red means booked. The Family Life Center tile shows only whole-building bookings; room bookings show on their own tiles. Pick a time window above to check one event. Cancelled bookings do not block a space.</div>' +
-    '<div class="tiles">' + tiles + '</div>';
+    glanceStrip(tiles, inWin) + '<div class="tiles">' + tiles + '</div>';
+}
+function glanceStrip(tiles, inWin) {
+  const busy = (tiles.match(/class="tile busy"/g) || []).length, free = (tiles.match(/class="tile "/g) || []).length;
+  return '<div class="glance"><div class="g-busy"><b>' + busy + '</b><span>' + (busy === 1 ? 'space booked' : 'spaces booked') + '</span></div>' +
+    '<div><b>' + free + '</b><span>' + (free === 1 ? 'space open' : 'spaces open') + '</span></div>' +
+    '<div class="g-ev"><b>' + inWin.length + '</b><span>' + (inWin.length === 1 ? 'booking in this window' : 'bookings in this window') + '</span></div></div>';
 }
 
 /* Week grid */
@@ -767,11 +893,11 @@ function openSignIn() {
 async function doSignIn() {
   const name = $('si_name').value, e = S.data.editors.find(x => x.name === name);
   if (e && e.pin === await hashPin($('si_pin').value)) {
-    S.editor = name; try { sessionStorage.setItem('fr_editor', name); } catch (x) {}
+    S.editor = name; try { sessionStorage.setItem('fr_editor', name); localStorage.setItem('fr_editor', name); } catch (x) {}
     closeModal(); render(); toast('Signed in as ' + name);
   } else $('si_msg').textContent = 'That PIN does not match. Please try again.';
 }
-function signOut() { S.editor = null; try { sessionStorage.removeItem('fr_editor'); } catch (e) {} render(); }
+function signOut() { S.editor = null; try { sessionStorage.removeItem('fr_editor'); localStorage.removeItem('fr_editor'); } catch (e) {} render(); }
 function edRow(e, i) {
   return '<div class="edrow"><input data-ed="name" placeholder="Name" value="' + esc(e.name || '') + '"><input data-ed="pin" type="password" inputmode="numeric" placeholder="' + (e.pin ? 'New PIN (blank keeps current)' : 'PIN, 4 to 8 digits') + '"><button class="btn danger small" data-act="edRemove" data-i="' + i + '">Remove</button></div>';
 }
@@ -798,7 +924,7 @@ async function saveEditors() {
   const first = $('edbody').dataset.first === '1';
   try {
     await mutate(d => { d.editors = list; });
-    if (first || !S.editor) { S.editor = list[0].name; try { sessionStorage.setItem('fr_editor', S.editor); } catch (x) {} }
+    if (first || !S.editor) { S.editor = list[0].name; try { sessionStorage.setItem('fr_editor', S.editor); localStorage.setItem('fr_editor', S.editor); } catch (x) {} }
     closeModal(); render(); toast('Editors saved');
   } catch (e) {}
 }
@@ -816,7 +942,7 @@ function openSettings() {
     '<label>Google Calendar API key<input id="c_gk" type="password" value="' + esc(c.calApiKey) + '" autocomplete="off"></label>' +
     '<label>Calendar write link (Apps Script web app URL, optional)<input id="c_wu" value="' + esc(c.writeUrl) + '" autocomplete="off"></label>' +
     '<label>Calendar write password<input id="c_ws" type="password" value="' + esc(c.writeSecret) + '" autocomplete="off"></label>' +
-    '<button class="btn primary" data-act="saveCfg">Save connections and reload</button>' +
+    '<button class="btn primary" data-act="saveCfg">Save connections and reload</button> <button class="btn" data-act="setupLink">Copy setup link for a phone or another device</button><input id="c_link" readonly style="display:none;margin-top:8px" aria-label="Setup link">' +
     '<p class="note">Tip: you can paste these four values into the CONFIG lines near the top of the file so everyone gets them automatically.</p></fieldset>';
   if (ed) {
     h += '<fieldset><legend>Spaces</legend><div id="splist"></div><button class="btn small" data-act="spAdd">Add a space</button> <button class="btn primary small" data-act="spSave">Save spaces</button>' +
@@ -864,6 +990,12 @@ const ACT = {
     try { await mutate(d => { d.spaces = list; }); closeModal(); toast('Spaces saved'); } catch (e) {}
   },
   emSave: async () => { try { const r = await calWrite({ action: 'setRecipients', emails: $('c_em').value.trim() }); $('c_em').value = r.emails || ''; toast('Email list saved'); } catch (e) { toast('Could not save: ' + e.message); } },
+  setupLink: () => {
+    const c = cfg();
+    const link = location.href.split('#')[0] + '#setup=' + encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(c)))));
+    const box = $('c_link'); box.style.display = 'block'; box.value = link; box.focus(); box.select();
+    try { navigator.clipboard.writeText(link).then(() => toast('Setup link copied'), () => toast('Select the link and copy it')); } catch (e) { toast('Select the link and copy it'); }
+  },
   saveCfg: () => {
     const o = { binId: $('c_bin').value.trim(), masterKey: $('c_key').value.trim(), calendarId: $('c_cal').value.trim(), calApiKey: $('c_gk').value.trim(), writeUrl: $('c_wu').value.trim(), writeSecret: $('c_ws').value.trim() };
     try { localStorage.setItem('fr_cfg', JSON.stringify(o)); } catch (e) {}
@@ -896,6 +1028,7 @@ document.addEventListener('keydown', ev => {
 async function init() {
   renderChrome();
   try { S.data = await loadData(); } catch (e) { S.loadErr = e.message + '. Check Settings, and remember saved data only loads from your github.io page, not inside Claude.'; S.data = normalize(null); }
+  if (S.editor && !S.loadErr && S.data.editors.length && !S.data.editors.some(e => e.name === S.editor)) signOut();
   try { await ensureCal(true); } catch (e) { S.calErr = 'Calendar problem: ' + e.message; }
   render(); purgeGone();
   setInterval(async () => {
@@ -905,6 +1038,7 @@ async function init() {
   }, 60000);
   setInterval(async () => { if ($('modalRoot').innerHTML) return; try { await ensureCal(true); } catch (e) {} render(); purgeGone(); }, 120000);
 }
+document.body.classList.add('intro'); setTimeout(() => document.body.classList.remove('intro'), 1400);
 init();
 </script>
 </body>
