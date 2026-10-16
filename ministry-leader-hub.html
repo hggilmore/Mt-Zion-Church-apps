@@ -1,5 +1,6 @@
 <!--
 CHANGELOG
+v1.5.8 - Visit notes are hidden on the first tab (Urgent needs and Follow ups) until Show notes is tapped; Settings option to hide notes in History too.
 v1.5.7 - Mt. Zion church website link added to the built-in links.
 v1.5.6 - Church apps and links card on the first tab; Online Member Directory link built in; administrator can add more links.
 v1.5.5 - Install settings now point to the Mt-Zion-Church-apps repository.
@@ -325,6 +326,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-of
   <h2>Display</h2>
   <div class="row"><div><label>Text size</label><select id="uiSize" onchange="setUI('size',this.value)"><option value="normal">Normal</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></div>
   <div><label>Colors</label><select id="uiTheme" onchange="setUI('theme',this.value)"><option value="light">Light</option><option value="dark">Dark</option><option value="auto">Match my phone</option></select></div></div>
+  <label>Visit notes in History</label><select id="uiNotes" onchange="setUI('hideNotes',this.value==='hide');renderAll()"><option value="show">Show them</option><option value="hide">Hide until I tap Show notes</option></select>
   <p class="muted">These choices apply only to this phone or computer.</p>
  </div>
  <div class="card">
@@ -768,16 +770,22 @@ function editVisit(id){
 function deleteVisit(id){var vv=db.visits.find(function(x){return x.id===id});if(!vv||!canDelete(vv)){say('Not allowed','Only the person who entered this record, or the administrator, can delete it.');return}ask('Delete record','Delete this record? This cannot be undone.','Delete',function(){logAct('Deleted',vv.type+' for '+memName(vv.memberId));db.deleted.push(id);db.visits=db.visits.filter(function(v){return v.id!==id});persist();renderAll()})}
 function markDone(id){var v=db.visits.find(function(x){return x.id===id});v.done=true;v.ts=Date.now();logAct('Resolved','Follow up for '+memName(v.memberId));persist();renderAll()}
 
-function visitHtml(v,actions){
+function noteHtml(v,hide){
+  if(!v.notes)return '';
+  if(!hide&&!getUI().hideNotes)return '<div>'+esc(v.notes)+'</div>';
+  return '<div><button class="btn sm ghost" onclick="toggleNote(this)">Show notes</button><div class="hide" style="margin-top:4px">'+esc(v.notes)+'</div></div>';
+}
+function toggleNote(b){var d=b.nextElementSibling;var h=d.classList.toggle('hide');b.textContent=h?'Show notes':'Hide notes'}
+function visitHtml(v,actions,hideNotes){
   return '<div class="item v-'+tcls(v.type)+'"><span class="tag t-'+tcls(v.type)+'">'+esc(v.type)+'</span>'+(v.urgent&&!v.done?'<span class="tag" style="background:#b3261e">Urgent</span>':'')+'<b>'+esc(memName(v.memberId))+'</b>'+
    '<div class="muted">'+fmtDate(v.date)+(v.time?' at '+fmtTime(v.time):'')+(v.deacon?' by '+esc(v.deacon):'')+(v.reason?' | '+esc(v.reason):'')+(v.location?' | '+esc(v.location):'')+(v.enteredBy&&!same(v.enteredBy,v.deacon)?' | entered by '+esc(v.enteredBy):'')+'</div>'+
-   (v.notes?'<div>'+esc(v.notes)+'</div>':'')+
+   noteHtml(v,hideNotes)+
    (v.follow&&!v.done?'<div class="muted" style="color:var(--copper);font-weight:600">Follow up'+(v.followDate?' by '+fmtDate(v.followDate)+(v.followDate<today()?' (overdue)':(v.followDate===today()?' (due today)':'')):'')+'</div>':'')+
    (actions?'<div style="margin-top:6px">'+actions+'</div>':'')+'</div>';
 }
 function renderFollow(){
   var l=db.visits.filter(function(v){return v.follow&&!v.done}).sort(function(a,b){return (a.followDate||'9999').localeCompare(b.followDate||'9999')});
-  $('followList').innerHTML=l.map(function(v){return visitHtml(v,'<button class="btn sm" onclick="markDone(\''+v.id+'\')">Mark done</button><button class="btn sm ghost" onclick="editVisit(\''+v.id+'\')">Edit</button>')}).join('')||'<p class="muted">Nothing waiting.</p>';
+  $('followList').innerHTML=l.map(function(v){return visitHtml(v,'<button class="btn sm" onclick="markDone(\''+v.id+'\')">Mark done</button><button class="btn sm ghost" onclick="editVisit(\''+v.id+'\')">Edit</button>',true)}).join('')||'<p class="muted">Nothing waiting.</p>';
 }
 function renderHistory(){
   var t=$('hType').value,m=$('hMember').value,q=$('hSearch').value.toLowerCase();
@@ -887,7 +895,7 @@ function renderUrgent(){
   if(!l.length){el.classList.add('hide');el.innerHTML='';return}
   el.classList.remove('hide');
   el.innerHTML='<h2 style="color:#b3261e">Urgent needs ('+l.length+')</h2>'+l.map(function(v){
-    return visitHtml(v,'<button class="btn sm" onclick="markDone(\''+v.id+'\')">Mark resolved</button><button class="btn sm ghost" onclick="editVisit(\''+v.id+'\')">Edit</button>'+contactLinks(memById(v.memberId)));
+    return visitHtml(v,'<button class="btn sm" onclick="markDone(\''+v.id+'\')">Mark resolved</button><button class="btn sm ghost" onclick="editVisit(\''+v.id+'\')">Edit</button>'+contactLinks(memById(v.memberId)),true);
   }).join('');
 }
 function renderCare(){
@@ -976,7 +984,7 @@ function applyUI(){
   var u=getUI(),h=document.documentElement,t=u.theme||'light';
   if(t==='auto')t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
   h.setAttribute('data-size',u.size||'normal');h.setAttribute('data-theme',t);
-  var a=$('uiSize'),b=$('uiTheme');if(a)a.value=u.size||'normal';if(b)b.value=u.theme||'light';
+  var a=$('uiSize'),b=$('uiTheme'),c=$('uiNotes');if(a)a.value=u.size||'normal';if(b)b.value=u.theme||'light';if(c)c.value=u.hideNotes?'hide':'show';
 }
 function setUI(k,v){var u=getUI();u[k]=v;lsSet(LSUI,JSON.stringify(u));applyUI()}
 /* PIN login */
