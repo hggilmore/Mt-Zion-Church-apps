@@ -1,0 +1,798 @@
+<!--
+CHANGELOG
+v2.0.0 - Sync between devices (JSONBin); verse sets with Popular Scriptures and 8 topic sets; search and filters; Listen mode; Speak mode; daily goal and streak; verse of the week; calendar reminder; review weak verses; copy a verse into another translation; Settings tab.
+v1.1.0 - Starter library grown to 75 KJV verses; added "Add starter verses" button in Library for existing users.
+v1.0.0 - First release: verse library with starter KJV verses, Today review list, practice modes (read, blanks, first letters, type it), spaced review boxes, backup and restore.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scripture Memory</title>
+<style>
+:root{--blue:#0086FF;--purple:#410942;--copper:#A95D4D;--lav:#E9BFF5;--navy:#10152B;--gray:#3F3F3F;--bg:#FAF6FC;--card:#fff;--line:#E3D3EA}
+*{box-sizing:border-box}
+body{margin:0;font-family:Georgia,"Times New Roman",serif;background:var(--bg);color:var(--gray);line-height:1.5}
+button,input,textarea,select{font-family:inherit;font-size:1rem}
+header{background:var(--purple);color:#fff;padding:14px 16px}
+header h1{margin:0;font-size:1.4rem;font-weight:normal}
+header p{margin:2px 0 0;color:var(--lav);font-size:.9rem}
+nav{display:flex;background:var(--navy);position:sticky;top:0;z-index:5}
+nav button{flex:1;background:none;border:0;color:var(--lav);padding:13px 6px;cursor:pointer;border-bottom:3px solid transparent}
+nav button.on{color:#fff;border-bottom-color:var(--blue);background:rgba(255,255,255,.07)}
+main{max-width:820px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.sp{justify-content:space-between}
+.btn{background:var(--blue);color:#fff;border:0;border-radius:8px;padding:10px 16px;cursor:pointer}
+.btn:hover{filter:brightness(.92)}
+.btn.alt{background:#fff;color:var(--purple);border:1px solid var(--purple)}
+.btn.warn{background:var(--copper)}
+.btn.sm{padding:6px 11px;font-size:.9rem}
+h2{color:var(--purple);margin:0 0 8px;font-size:1.2rem}
+.ref{color:var(--purple);font-weight:bold}
+.muted{color:#777;font-size:.9rem}
+.tag{display:inline-block;background:var(--lav);color:var(--purple);border-radius:20px;padding:1px 10px;font-size:.8rem}
+.verse{font-size:1.25rem;line-height:1.8;padding:8px 2px}
+.blank{display:inline-block;min-width:2.2em;border-bottom:2px solid var(--blue);color:transparent;cursor:pointer;text-align:center;margin:0 1px}
+.blank.open{color:var(--copper);border-bottom-color:var(--copper)}
+.ok{color:#1b7a3a}.miss{color:#b3261e;text-decoration:underline}
+input[type=text],textarea,select{width:100%;padding:9px;border:1px solid #bbb;border-radius:8px;background:#fff;color:var(--gray)}
+textarea{min-height:110px}
+label{display:block;margin:8px 0 3px;font-weight:bold;color:var(--purple)}
+.modes{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.modes button{border:1px solid var(--purple);background:#fff;color:var(--purple);border-radius:20px;padding:6px 13px;cursor:pointer}
+.modes button.on{background:var(--purple);color:#fff}
+.bar{height:8px;background:var(--line);border-radius:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--blue)}
+.ov{position:fixed;inset:0;background:rgba(16,21,43,.6);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50}
+.modal{background:#fff;border-radius:12px;max-width:440px;width:100%;padding:18px;max-height:90vh;overflow:auto}
+.modal h3{margin:0 0 8px;color:var(--purple)}
+.modal .row{justify-content:flex-end;margin-top:14px}
+.hide{display:none}
+input[type=time],input[type=password]{width:100%;padding:9px;border:1px solid #bbb;border-radius:8px;background:#fff;color:var(--gray)}
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px}
+.chips{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0}
+.chips .tag{background:#fff;border:1px solid var(--lav)}
+.tag.warn{background:#f3d9d3;color:#7a2e20}
+label.chk{font-weight:normal;display:flex;gap:8px;align-items:center;color:var(--gray)}
+nav button{font-size:.95rem}
+</style>
+</head>
+<body>
+<header><h1>Scripture Memory</h1><p>Hide the Word in your heart</p></header>
+<nav id="nav">
+<button data-t="today" class="on">Today</button>
+<button data-t="practice">Practice</button>
+<button data-t="library">Library</button>
+<button data-t="settings">Settings</button>
+</nav>
+<main id="main"></main>
+
+<script>
+var KEY="mz_scripture_memory_v1",DKEY="mz_scripture_memory_device_v1";
+var GAPS=[0,1,2,4,8,16];
+var S=null;
+var DEV={key:"",bin:"",remindOn:false,remindTime:"08:00",rate:0.9,lastSync:"",status:""};
+var view="today",curId=null,mode="read",level=0.5,queue=[],qTotal=0,pset="";
+var lib={q:"",set:"",tr:"",st:"",panel:false};
+var spk=0,rec=null;
+var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+
+var STARTERS=[
+["John 3:16","For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life."],
+["Psalm 23:1","The LORD is my shepherd; I shall not want."],
+["Proverbs 3:5-6","Trust in the LORD with all thine heart; and lean not unto thine own understanding. In all thy ways acknowledge him, and he shall direct thy paths."],
+["Philippians 4:13","I can do all things through Christ which strengtheneth me."],
+["Romans 8:28","And we know that all things work together for good to them that love God, to them who are the called according to his purpose."],
+["Joshua 1:9","Have not I commanded thee? Be strong and of a good courage; be not afraid, neither be thou dismayed: for the LORD thy God is with thee whithersoever thou goest."],
+["Psalm 119:11","Thy word have I hid in mine heart, that I might not sin against thee."],
+["Isaiah 41:10","Fear thou not; for I am with thee: be not dismayed; for I am thy God: I will strengthen thee; yea, I will help thee; yea, I will uphold thee with the right hand of my righteousness."]
+];
+
+var MORE=[
+["Genesis 1:1","In the beginning God created the heaven and the earth."],
+["Exodus 20:3","Thou shalt have no other gods before me."],
+["Deuteronomy 6:5","And thou shalt love the LORD thy God with all thine heart, and with all thy soul, and with all thy might."],
+["Joshua 24:15b","But as for me and my house, we will serve the LORD."],
+["Psalm 1:1-2","Blessed is the man that walketh not in the counsel of the ungodly, nor standeth in the way of sinners, nor sitteth in the seat of the scornful. But his delight is in the law of the LORD; and in his law doth he meditate day and night."],
+["Psalm 19:14","Let the words of my mouth, and the meditation of my heart, be acceptable in thy sight, O LORD, my strength, and my redeemer."],
+["Psalm 27:1","The LORD is my light and my salvation; whom shall I fear? the LORD is the strength of my life; of whom shall I be afraid?"],
+["Psalm 34:8","O taste and see that the LORD is good: blessed is the man that trusteth in him."],
+["Psalm 37:4","Delight thyself also in the LORD; and he shall give thee the desires of thine heart."],
+["Psalm 46:1","God is our refuge and strength, a very present help in trouble."],
+["Psalm 46:10","Be still, and know that I am God: I will be exalted among the heathen, I will be exalted in the earth."],
+["Psalm 51:10","Create in me a clean heart, O God; and renew a right spirit within me."],
+["Psalm 56:3","What time I am afraid, I will trust in thee."],
+["Psalm 91:1","He that dwelleth in the secret place of the most High shall abide under the shadow of the Almighty."],
+["Psalm 100:4","Enter into his gates with thanksgiving, and into his courts with praise: be thankful unto him, and bless his name."],
+["Psalm 118:24","This is the day which the LORD hath made; we will rejoice and be glad in it."],
+["Psalm 119:105","Thy word is a lamp unto my feet, and a light unto my path."],
+["Psalm 121:1-2","I will lift up mine eyes unto the hills, from whence cometh my help. My help cometh from the LORD, which made heaven and earth."],
+["Psalm 139:14","I will praise thee; for I am fearfully and wonderfully made: marvellous are thy works; and that my soul knoweth right well."],
+["Proverbs 16:3","Commit thy works unto the LORD, and thy thoughts shall be established."],
+["Proverbs 18:10","The name of the LORD is a strong tower: the righteous runneth into it, and is safe."],
+["Proverbs 22:6","Train up a child in the way he should go: and when he is old, he will not depart from it."],
+["Proverbs 27:17","Iron sharpeneth iron; so a man sharpeneth the countenance of his friend."],
+["Ecclesiastes 3:1","To every thing there is a season, and a time to every purpose under the heaven."],
+["Isaiah 26:3","Thou wilt keep him in perfect peace, whose mind is stayed on thee: because he trusteth in thee."],
+["Isaiah 40:31","But they that wait upon the LORD shall renew their strength; they shall mount up with wings as eagles; they shall run, and not be weary; and they shall walk, and not faint."],
+["Isaiah 53:5","But he was wounded for our transgressions, he was bruised for our iniquities: the chastisement of our peace was upon him; and with his stripes we are healed."],
+["Jeremiah 29:11","For I know the thoughts that I think toward you, saith the LORD, thoughts of peace, and not of evil, to give you an expected end."],
+["Lamentations 3:22-23","It is of the LORD's mercies that we are not consumed, because his compassions fail not. They are new every morning: great is thy faithfulness."],
+["Micah 6:8","He hath shewed thee, O man, what is good; and what doth the LORD require of thee, but to do justly, and to love mercy, and to walk humbly with thy God?"],
+["Matthew 5:16","Let your light so shine before men, that they may see your good works, and glorify your Father which is in heaven."],
+["Matthew 6:33","But seek ye first the kingdom of God, and his righteousness; and all these things shall be added unto you."],
+["Matthew 11:28","Come unto me, all ye that labour and are heavy laden, and I will give you rest."],
+["Matthew 22:37","Jesus said unto him, Thou shalt love the Lord thy God with all thy heart, and with all thy soul, and with all thy mind."],
+["Matthew 28:19-20","Go ye therefore, and teach all nations, baptizing them in the name of the Father, and of the Son, and of the Holy Ghost: Teaching them to observe all things whatsoever I have commanded you: and, lo, I am with you alway, even unto the end of the world. Amen."],
+["Luke 6:31","And as ye would that men should do to you, do ye also to them likewise."],
+["John 1:1","In the beginning was the Word, and the Word was with God, and the Word was God."],
+["John 8:32","And ye shall know the truth, and the truth shall make you free."],
+["John 10:10","The thief cometh not, but for to steal, and to kill, and to destroy: I am come that they might have life, and that they might have it more abundantly."],
+["John 13:34","A new commandment I give unto you, That ye love one another; as I have loved you, that ye also love one another."],
+["John 14:6","Jesus saith unto him, I am the way, the truth, and the life: no man cometh unto the Father, but by me."],
+["John 14:27","Peace I leave with you, my peace I give unto you: not as the world giveth, give I unto you. Let not your heart be troubled, neither let it be afraid."],
+["John 15:5","I am the vine, ye are the branches: He that abideth in me, and I in him, the same bringeth forth much fruit: for without me ye can do nothing."],
+["Acts 1:8","But ye shall receive power, after that the Holy Ghost is come upon you: and ye shall be witnesses unto me both in Jerusalem, and in all Judaea, and in Samaria, and unto the uttermost part of the earth."],
+["Romans 3:23","For all have sinned, and come short of the glory of God."],
+["Romans 5:8","But God commendeth his love toward us, in that, while we were yet sinners, Christ died for us."],
+["Romans 6:23","For the wages of sin is death; but the gift of God is eternal life through Jesus Christ our Lord."],
+["Romans 10:9","That if thou shalt confess with thy mouth the Lord Jesus, and shalt believe in thine heart that God hath raised him from the dead, thou shalt be saved."],
+["Romans 12:2","And be not conformed to this world: but be ye transformed by the renewing of your mind, that ye may prove what is that good, and acceptable, and perfect, will of God."],
+["1 Corinthians 15:58","Therefore, my beloved brethren, be ye stedfast, unmoveable, always abounding in the work of the Lord, forasmuch as ye know that your labour is not in vain in the Lord."],
+["2 Corinthians 5:17","Therefore if any man be in Christ, he is a new creature: old things are passed away; behold, all things are become new."],
+["2 Corinthians 12:9","And he said unto me, My grace is sufficient for thee: for my strength is made perfect in weakness."],
+["Galatians 5:22-23","But the fruit of the Spirit is love, joy, peace, longsuffering, gentleness, goodness, faith, Meekness, temperance: against such there is no law."],
+["Ephesians 2:8-9","For by grace are ye saved through faith; and that not of yourselves: it is the gift of God: Not of works, lest any man should boast."],
+["Ephesians 4:32","And be ye kind one to another, tenderhearted, forgiving one another, even as God for Christ's sake hath forgiven you."],
+["Philippians 4:6-7","Be careful for nothing; but in every thing by prayer and supplication with thanksgiving let your requests be made known unto God. And the peace of God, which passeth all understanding, shall keep your hearts and minds through Christ Jesus."],
+["Colossians 3:23","And whatsoever ye do, do it heartily, as to the Lord, and not unto men."],
+["1 Thessalonians 5:16-18","Rejoice evermore. Pray without ceasing. In every thing give thanks: for this is the will of God in Christ Jesus concerning you."],
+["2 Timothy 1:7","For God hath not given us the spirit of fear; but of power, and of love, and of a sound mind."],
+["2 Timothy 3:16","All scripture is given by inspiration of God, and is profitable for doctrine, for reproof, for correction, for instruction in righteousness."],
+["Hebrews 11:1","Now faith is the substance of things hoped for, the evidence of things not seen."],
+["Hebrews 13:8","Jesus Christ the same yesterday, and to day, and for ever."],
+["James 1:5","If any of you lack wisdom, let him ask of God, that giveth to all men liberally, and upbraideth not; and it shall be given him."],
+["1 Peter 5:7","Casting all your care upon him; for he careth for you."],
+["1 John 1:9","If we confess our sins, he is faithful and just to forgive us our sins, and to cleanse us from all unrighteousness."],
+["1 John 4:19","We love him, because he first loved us."],
+["Revelation 3:20","Behold, I stand at the door, and knock: if any man hear my voice, and open the door, I will come in to him, and will sup with him, and he with me."]
+];
+
+var SETDEFS=[
+["s_popular","Popular Scriptures","John 3:16|Psalm 23:1|Proverbs 3:5-6|Philippians 4:13|Romans 8:28|Joshua 1:9|Isaiah 41:10|Jeremiah 29:11|Psalm 46:1|Matthew 6:33|Romans 12:2|John 14:6|Isaiah 40:31|Philippians 4:6-7|Romans 6:23|Ephesians 2:8-9|Psalm 119:105|Psalm 118:24|2 Timothy 1:7|Hebrews 11:1|Genesis 1:1|Matthew 11:28|1 John 1:9|Romans 3:23|Psalm 119:11|Psalm 27:1|Galatians 5:22-23|Romans 5:8|Proverbs 22:6|Matthew 28:19-20|John 1:1|Psalm 139:14|1 Peter 5:7|Joshua 24:15b"],
+["s_salvation","Salvation","John 3:16|Romans 3:23|Romans 5:8|Romans 6:23|Romans 10:9|Ephesians 2:8-9|1 John 1:9|Revelation 3:20|John 14:6|2 Corinthians 5:17|Isaiah 53:5|John 10:10"],
+["s_peace","Peace and Comfort","Psalm 23:1|Psalm 46:1|Psalm 46:10|Psalm 91:1|Psalm 121:1-2|Isaiah 26:3|John 14:27|Philippians 4:6-7|Matthew 11:28|1 Peter 5:7|Lamentations 3:22-23|Psalm 56:3"],
+["s_faith","Faith and Trust","Proverbs 3:5-6|Hebrews 11:1|Psalm 37:4|Proverbs 16:3|Romans 8:28|Jeremiah 29:11|Psalm 34:8|Hebrews 13:8|John 15:5|Psalm 27:1|Proverbs 18:10"],
+["s_strength","Strength and Courage","Philippians 4:13|Joshua 1:9|Isaiah 41:10|Isaiah 40:31|2 Timothy 1:7|2 Corinthians 12:9|Psalm 27:1|1 Corinthians 15:58|Psalm 56:3"],
+["s_love","Love and Forgiveness","John 13:34|Ephesians 4:32|1 John 4:19|Matthew 22:37|Deuteronomy 6:5|Luke 6:31|Romans 5:8|Galatians 5:22-23"],
+["s_wisdom","Wisdom and Guidance","James 1:5|Proverbs 3:5-6|2 Timothy 3:16|Psalm 119:105|Psalm 119:11|Psalm 1:1-2|Proverbs 22:6|Proverbs 27:17|Micah 6:8|Ecclesiastes 3:1|John 8:32"],
+["s_praise","Praise and Worship","Psalm 100:4|Psalm 118:24|Psalm 19:14|Psalm 139:14|Psalm 34:8|1 Thessalonians 5:16-18|Genesis 1:1|Exodus 20:3|Psalm 51:10"],
+["s_living","Christian Living","Matthew 5:16|Matthew 6:33|Matthew 28:19-20|Acts 1:8|Colossians 3:23|Romans 12:2|Joshua 24:15b|1 Corinthians 15:58|Micah 6:8|Luke 6:31"]
+];
+
+/* ---------- Basics ---------- */
+function pad(n){return n<10?"0"+n:""+n}
+function dk(x){var d=(x instanceof Date)?x:new Date(x);return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
+function today(){var d=new Date();d.setHours(0,0,0,0);return d.getTime()}
+function addDays(n){var d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()+n);return d.getTime()}
+function uid(){return "v"+Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function sid(ref){return "st_"+ref.toLowerCase().replace(/[^a-z0-9]+/g,"_")}
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function oc(fn,id){return "onclick='"+fn+"(\""+id+"\")'"}
+function shuffle(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1)),t=a[i];a[i]=a[j];a[j]=t}return a}
+function byAdded(a,b){return (a.added||0)-(b.added||0)}
+function byName(a,b){return a.name.toLowerCase()<b.name.toLowerCase()?-1:1}
+function allStarters(){return STARTERS.concat(MORE)}
+function blank(){return {verses:[],sets:[],deleted:{},history:{},settings:{goal:3,defTrans:"KJV",weekly:null,setsSeeded:false,u:0}}}
+function byId(id){for(var i=0;i<S.verses.length;i++)if(S.verses[i].id===id)return S.verses[i];return null}
+function getSet(id){for(var i=0;i<S.sets.length;i++)if(S.sets[i].id===id)return S.sets[i];return null}
+function refExists(ref){var r=ref.toLowerCase();for(var i=0;i<S.verses.length;i++)if(S.verses[i].ref.toLowerCase()===r)return true;return false}
+function isWeak(v){return (v.miss||0)>0&&v.box<=2}
+function dueList(){return S.verses.filter(function(v){return v.due<=today()}).sort(function(a,b){return a.due-b.due})}
+function weakList(){return S.verses.filter(isWeak)}
+function boxName(b){return ["New","Learning","Learning","Growing","Strong","Mastered"][b]||"New"}
+function ids(list){return list.map(function(v){return v.id})}
+
+/* ---------- Saving and loading ---------- */
+function saveLocal(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function devSave(){try{localStorage.setItem(DKEY,JSON.stringify(DEV))}catch(e){}}
+function save(){saveLocal();scheduleSync()}
+
+function ensure(){
+  S.verses=S.verses||[];S.sets=S.sets||[];S.deleted=S.deleted||{};S.history=S.history||{};S.settings=S.settings||{};
+  if(!S.settings.goal)S.settings.goal=3;
+  if(!S.settings.defTrans)S.settings.defTrans="KJV";
+  if(S.settings.u==null)S.settings.u=0;
+  var map={};allStarters().forEach(function(s){map[s[0].toLowerCase()+"|"+s[1]]=sid(s[0])});
+  S.verses.forEach(function(v){
+    var k=v.ref.toLowerCase()+"|"+v.text;
+    if(map[k]&&v.id!==map[k]&&!byId(map[k]))v.id=map[k];
+    if(v.u==null)v.u=v.added||0;
+    if(v.miss==null)v.miss=0;
+    if(!v.sets)v.sets=[];
+  });
+  S.sets.forEach(function(s){if(s.u==null)s.u=0});
+}
+function applyStarterSets(){
+  SETDEFS.forEach(function(d){
+    var set=getSet(d[0]);
+    if(!set){if(S.deleted[d[0]])return;set={id:d[0],name:d[1],u:0};S.sets.push(set)}
+    d[2].split("|").forEach(function(ref){
+      var v=byId(sid(ref));
+      if(v&&v.sets.indexOf(d[0])<0)v.sets.push(d[0]);
+    });
+  });
+}
+function addStarters(){
+  var n=0,t=Date.now();
+  allStarters().forEach(function(s,i){
+    var id=sid(s[0]);
+    if(byId(id)||refExists(s[0]))return;
+    var wasDeleted=!!S.deleted[id];
+    delete S.deleted[id];
+    S.verses.push({id:id,ref:s[0],text:s[1],version:"KJV",box:0,due:today(),added:t+i,reps:0,miss:0,sets:[],u:wasDeleted?t:0});
+    n++;
+  });
+  applyStarterSets();
+  return n;
+}
+function prep(){
+  ensure();
+  if(!S.settings.setsSeeded){applyStarterSets();S.settings.setsSeeded=true;}
+}
+function load(){
+  try{var r=localStorage.getItem(KEY);if(r)S=JSON.parse(r)}catch(e){S=null}
+  try{var d=localStorage.getItem(DKEY);if(d){var o=JSON.parse(d);for(var k in o)DEV[k]=o[k]}}catch(e){}
+  if(!S||!S.verses){S=blank();ensure();addStarters();S.settings.setsSeeded=true;saveLocal();return}
+  prep();saveLocal();
+}
+
+/* ---------- Sync (JSONBin v3) ---------- */
+var syncTimer=null,syncBusy=false;
+function newer(x,y){return (y.u||0)>(x.u||0)?y:x}
+function mergeList(la,lb,del){
+  var m={};
+  la.forEach(function(x){m[x.id]=x});
+  lb.forEach(function(y){m[y.id]=m[y.id]?newer(m[y.id],y):y});
+  var out=[];
+  for(var id in m){var x=m[id];if(del[id]&&del[id]>=(x.u||0))continue;out.push(x)}
+  return out;
+}
+function merge(a,b){
+  var del={},h={};
+  [a.deleted||{},b.deleted||{}].forEach(function(d){for(var k in d)del[k]=Math.max(del[k]||0,d[k])});
+  [a.history||{},b.history||{}].forEach(function(o){for(var k in o)h[k]=Math.max(h[k]||0,o[k])});
+  var sa=a.settings||{u:0},sb=b.settings||{u:0};
+  return {verses:mergeList(a.verses||[],b.verses||[],del),sets:mergeList(a.sets||[],b.sets||[],del),deleted:del,history:h,settings:(sb.u||0)>(sa.u||0)?sb:sa};
+}
+function setStatus(t){DEV.status=t;var el=document.getElementById("syncstat");if(el)el.textContent=t}
+function scheduleSync(){
+  if(!DEV.key||!DEV.bin)return;
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(function(){syncNow(true)},2500);
+}
+function binUrl(){return "https://api.jsonbin.io/v3/b/"+encodeURIComponent(DEV.bin)}
+function syncNow(quiet){
+  if(!DEV.key||!DEV.bin){
+    if(!quiet)notice("Sync is not set up","Open Settings, enter your JSONBin Master Key and Bin ID, then try again.");
+    return Promise.resolve();
+  }
+  if(syncBusy)return Promise.resolve();
+  syncBusy=true;setStatus("Syncing...");
+  return fetch(binUrl()+"/latest",{headers:{"X-Master-Key":DEV.key}})
+  .then(function(r){if(!r.ok)throw new Error("could not read the bin (code "+r.status+")");return r.json()})
+  .then(function(j){
+    var remote=j.record;
+    if(remote&&remote.verses){S=merge(S,remote);prep();saveLocal()}
+    return fetch(binUrl(),{method:"PUT",headers:{"Content-Type":"application/json","X-Master-Key":DEV.key},body:JSON.stringify(S)});
+  })
+  .then(function(r){
+    if(!r.ok)throw new Error("could not save to the bin (code "+r.status+")");
+    DEV.lastSync=new Date().toLocaleString();devSave();syncBusy=false;
+    setStatus("Last synced "+DEV.lastSync);
+    if(!quiet)render();
+  })
+  .catch(function(e){
+    syncBusy=false;setStatus("Sync problem: "+e.message);
+    if(!quiet)notice("Sync problem","Sync failed: "+e.message+". Check your key and Bin ID, and make sure you are using your github.io address and not the Claude preview.");
+  });
+}
+function createBin(){
+  var key=(document.getElementById("s_key").value||"").trim();
+  if(!key){notice("Master Key needed","Paste your JSONBin Master Key first.");return}
+  setStatus("Creating bin...");
+  fetch("https://api.jsonbin.io/v3/b",{method:"POST",headers:{"Content-Type":"application/json","X-Master-Key":key,"X-Bin-Private":"true","X-Bin-Name":"scripture-memory"},body:JSON.stringify(S)})
+  .then(function(r){if(!r.ok)throw new Error("code "+r.status);return r.json()})
+  .then(function(j){
+    DEV.key=key;DEV.bin=j.metadata.id;DEV.lastSync=new Date().toLocaleString();devSave();
+    setStatus("Last synced "+DEV.lastSync);render();
+    notice("Bin created","Your Bin ID is "+DEV.bin+". On your other devices, enter this same Master Key and Bin ID in Settings.");
+  })
+  .catch(function(e){setStatus("Could not create bin: "+e.message);notice("Could not create bin","JSONBin said: "+e.message+". Check the key, and use your github.io address.")});
+}
+function saveSync(){
+  DEV.key=(document.getElementById("s_key").value||"").trim();
+  DEV.bin=(document.getElementById("s_bin").value||"").trim();
+  devSave();
+  if(DEV.key&&DEV.bin)syncNow(false);else notice("Saved","Sync settings saved on this device.");
+}
+
+/* ---------- Modals ---------- */
+function modal(title,bodyHtml,buttons){
+  var ov=document.createElement("div");ov.className="ov";
+  var m=document.createElement("div");m.className="modal";
+  m.innerHTML="<h3>"+esc(title)+"</h3><div>"+bodyHtml+"</div><div class='row'></div>";
+  var r=m.lastChild;
+  buttons.forEach(function(b){
+    var el=document.createElement("button");el.className="btn "+(b.cls||"");el.textContent=b.label;
+    el.onclick=function(){var keep=b.fn?b.fn(m):null;if(keep!==false)ov.remove()};
+    r.appendChild(el);
+  });
+  ov.appendChild(m);document.body.appendChild(ov);
+  var f=m.querySelector("input[type=text],textarea");if(f)f.focus();
+  return m;
+}
+function notice(t,msg){modal(t,"<p>"+esc(msg)+"</p>",[{label:"OK"}])}
+function confirmBox(t,msg,yes,fn){modal(t,"<p>"+esc(msg)+"</p>",[{label:"Cancel",cls:"alt"},{label:yes,cls:"warn",fn:fn}])}
+
+/* ---------- Navigation ---------- */
+document.getElementById("nav").onclick=function(e){
+  var t=e.target.getAttribute("data-t");if(!t)return;
+  stopSpeak();go(t);
+};
+function go(t){
+  view=t;
+  var bs=document.querySelectorAll("#nav button");
+  for(var i=0;i<bs.length;i++)bs[i].className=bs[i].getAttribute("data-t")===t?"on":"";
+  render();
+}
+function stopMic(){if(rec){try{rec.stop()}catch(e){}rec=null}}
+function render(){
+  stopMic();
+  var m=document.getElementById("main");
+  if(view==="today")m.innerHTML=renderToday();
+  else if(view==="practice")m.innerHTML=renderPractice();
+  else if(view==="library")m.innerHTML=renderLibrary();
+  else m.innerHTML=renderSettings();
+  if(view==="practice")wirePractice();
+  if(view==="library")fillLib();
+  window.scrollTo(0,0);
+}
+
+/* ---------- Streak, goal, weekly ---------- */
+function streak(){
+  var d=new Date();d.setHours(0,0,0,0);
+  if(!(S.history[dk(d)]>0))d.setDate(d.getDate()-1);
+  var n=0;
+  while(S.history[dk(d)]>0){n++;d.setDate(d.getDate()-1)}
+  return n;
+}
+function weekKey(){var d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-d.getDay());return dk(d)}
+function weeklyVerse(){var w=S.settings.weekly;return (w&&w.wk===weekKey())?byId(w.id):null}
+function setWeekly(id,say){
+  S.settings.weekly={id:id,wk:weekKey()};S.settings.u=Date.now();save();
+  if(say){var v=byId(id);notice("Verse of the week",v.ref+" is now your verse of the week.")}
+  render();
+}
+function pickWeekly(){
+  var cur=S.settings.weekly&&S.settings.weekly.id;
+  var pool=S.verses.filter(function(v){return v.box<5&&v.id!==cur});
+  if(!pool.length)pool=S.verses.filter(function(v){return v.id!==cur});
+  if(!pool.length)return;
+  setWeekly(pool[Math.floor(Math.random()*pool.length)].id,false);
+}
+
+/* ---------- Today ---------- */
+function weeklyCard(){
+  var v=weeklyVerse(),h="<div class='card'><h2>Verse of the week</h2>";
+  if(v){
+    h+="<p style='margin:0'><span class='ref'>"+esc(v.ref)+"</span> <span class='muted'>"+esc(v.version||"")+"</span></p><div class='verse' style='font-size:1.1rem'>"+esc(v.text)+"</div><p class='row'><button class='btn sm' "+oc("practice",v.id)+">Practice</button><button class='btn alt sm' "+oc("listen",v.id)+">Listen</button><button class='btn alt sm' onclick='pickWeekly()'>Pick a different one</button></p>";
+  }else{
+    h+="<p>No verse chosen for this week yet. Let the app pick one, or tap Weekly on any verse in the Library.</p><p class='row'><button class='btn sm' onclick='pickWeekly()'>Pick one for me</button><button class='btn alt sm' onclick='go(\"library\")'>Choose from Library</button></p>";
+  }
+  return h+"</div>";
+}
+function renderToday(){
+  var d=dueList(),n=S.verses.length,weak=weakList();
+  var mastered=S.verses.filter(function(v){return v.box>=5}).length;
+  var goal=S.settings.goal||3,done=S.history[dk(new Date())]||0,st=streak();
+  var h="<div class='card'><div class='row sp'><h2 style='margin:0'>Today</h2><span class='tag'>Streak: "+st+" day"+(st===1?"":"s")+"</span></div>";
+  h+="<p style='margin:8px 0 4px'>Daily goal: <b>"+Math.min(done,goal)+"</b> of "+goal+" verses practiced"+(done>=goal?". Goal reached, well done.":".")+"</p><div class='bar'><i style='width:"+Math.min(100,Math.round(done/goal*100))+"%'></i></div></div>";
+  h+=weeklyCard();
+  h+="<div class='card'>";
+  if(!n){return h+"<p>Your library is empty. Add a verse in the Library tab.</p></div>"}
+  h+="<p><b>"+d.length+"</b> verse"+(d.length===1?"":"s")+" ready for review. "+weak.length+" need extra work. "+mastered+" of "+n+" mastered.</p>";
+  h+="<div class='bar'><i style='width:"+Math.round(mastered/n*100)+"%'></i></div><p class='row'>";
+  if(d.length)h+="<button class='btn' onclick='runQueue(ids(dueList()))'>Start review</button>";
+  if(weak.length)h+="<button class='btn warn' onclick='startWeak()'>Practice weak verses ("+weak.length+")</button>";
+  h+="</p>";
+  if(!d.length)h+="<p>You are all caught up. You can still practice any verse from the Practice or Library tab.</p>";
+  h+="</div>";
+  d.forEach(function(v){
+    h+="<div class='card row sp'><div><span class='ref'>"+esc(v.ref)+"</span> <span class='tag'>"+boxName(v.box)+"</span><div class='muted'>"+esc(v.text.slice(0,70))+(v.text.length>70?"...":"")+"</div></div><button class='btn sm' "+oc("practice",v.id)+">Practice</button></div>";
+  });
+  return h;
+}
+
+/* ---------- Queue ---------- */
+function runQueue(list){
+  if(!list.length){notice("Nothing to practice","There are no verses to practice here yet.");return}
+  queue=list.slice();qTotal=list.length;nextInQueue();
+}
+function startWeak(){runQueue(shuffle(ids(weakList())))}
+function startSet(){
+  var list=S.verses.filter(function(x){return !pset||x.sets.indexOf(pset)>=0});
+  runQueue(shuffle(ids(list)));
+}
+function nextInQueue(){
+  if(!queue.length){curId=null;qTotal=0;go("today");return}
+  curId=queue.shift();mode="read";go("practice");
+}
+function practice(id){queue=[];qTotal=0;curId=id;mode="read";go("practice")}
+function listen(id){speak(byId(id),1)}
+
+/* ---------- Listen ---------- */
+function speechText(v){
+  var r=v.ref.replace(/(\d)[a-z]$/,"$1").replace(/(\d+):(\d+)-(\d+)/,"$1 verses $2 to $3").replace(/(\d+):(\d+)/,"$1 verse $2");
+  return r+". "+v.text;
+}
+function stopSpeak(){spk++;try{if(window.speechSynthesis)speechSynthesis.cancel()}catch(e){}}
+function speak(v,times){
+  if(!v)return;
+  if(!window.speechSynthesis||!window.SpeechSynthesisUtterance){notice("Not available","This browser cannot read aloud.");return}
+  stopSpeak();
+  var my=spk,n=times||1;
+  (function say(i){
+    if(i>=n||my!==spk)return;
+    var u=new SpeechSynthesisUtterance(speechText(v));
+    u.rate=DEV.rate||0.9;u.lang="en-US";
+    u.onend=function(){if(my===spk)setTimeout(function(){say(i+1)},700)};
+    speechSynthesis.speak(u);
+  })(0);
+}
+function setRate(val){DEV.rate=parseFloat(val);devSave()}
+
+/* ---------- Practice ---------- */
+function setOptions(sel,allLabel){
+  var h="<option value=''>"+esc(allLabel)+"</option>";
+  S.sets.slice().sort(byName).forEach(function(s){
+    var c=S.verses.filter(function(v){return v.sets.indexOf(s.id)>=0}).length;
+    h+="<option value='"+esc(s.id)+"'"+(sel===s.id?" selected":"")+">"+esc(s.name)+" ("+c+")</option>";
+  });
+  return h;
+}
+function renderPractice(){
+  var v=byId(curId),h;
+  if(!v){
+    var list=S.verses.filter(function(x){return !pset||x.sets.indexOf(pset)>=0}).sort(byAdded);
+    h="<div class='card'><h2>Practice</h2><label>Choose a set</label><select onchange='pset=this.value;render()'>"+setOptions(pset,"All verses")+"</select><p class='row'><button class='btn' onclick='startSet()'>Practice these "+list.length+" in random order</button></p></div>";
+    list.forEach(function(x){
+      h+="<div class='card row sp'><span class='ref'>"+esc(x.ref)+"</span><button class='btn sm' "+oc("practice",x.id)+">Practice</button></div>";
+    });
+    return h;
+  }
+  h="<div class='card'>";
+  if(qTotal)h+="<p class='muted' style='margin:0 0 6px'>Verse "+(qTotal-queue.length)+" of "+qTotal+"</p>";
+  h+="<div class='row sp'><div><span class='ref' style='font-size:1.2rem'>"+esc(v.ref)+"</span> <span class='muted'>"+esc(v.version||"")+"</span></div><span class='tag'>"+boxName(v.box)+"</span></div>";
+  var r=DEV.rate||0.9;
+  h+="<p class='row' style='margin:8px 0 0'><button class='btn alt sm' onclick='speak(byId(curId),1)'>Listen</button><button class='btn alt sm' onclick='speak(byId(curId),3)'>Listen 3 times</button><button class='btn alt sm' onclick='stopSpeak()'>Stop</button><select style='width:auto' onchange='setRate(this.value)'><option value='0.7'"+(r<0.8?" selected":"")+">Slow</option><option value='0.9'"+(r>=0.8&&r<1?" selected":"")+">Normal</option><option value='1.1'"+(r>=1?" selected":"")+">Fast</option></select></p>";
+  h+="<div class='modes' id='modes'>";
+  [["read","Read"],["blanks","Blanks"],["letters","First letters"],["type","Type it"],["speak","Say it"]].forEach(function(m){
+    h+="<button data-m='"+m[0]+"' class='"+(mode===m[0]?"on":"")+"'>"+m[1]+"</button>";
+  });
+  h+="</div><div id='pbody'></div></div>";
+  h+="<div class='card'><p class='muted'>When you finish, tell the app how it went. Verses you know come back later; verses you miss come back tomorrow and show up under weak verses.</p><div class='row'><button class='btn' onclick='grade(true)'>I knew it</button><button class='btn warn' onclick='grade(false)'>Need more practice</button></div></div>";
+  return h;
+}
+function tokens(text){
+  return text.split(/\s+/).filter(Boolean).map(function(t){
+    var m=t.match(/^([^A-Za-z0-9]*)(.*?)([^A-Za-z0-9]*)$/);
+    return {pre:m[1],w:m[2],post:m[3]};
+  });
+}
+function wirePractice(){
+  var v=byId(curId);if(!v)return;
+  var mb=document.getElementById("modes");
+  mb.onclick=function(e){var m=e.target.getAttribute("data-m");if(!m)return;mode=m;render()};
+  var b=document.getElementById("pbody"),t=tokens(v.text),h="";
+  if(mode==="read"){
+    h="<div class='verse'>"+esc(v.text)+"</div><p class='muted'>Read it aloud three times, then try Blanks.</p>";
+  }else if(mode==="blanks"){
+    h="<div class='modes' id='lv'>";
+    [[0.25,"Easy"],[0.5,"Medium"],[0.75,"Hard"],[1,"All"]].forEach(function(l){h+="<button data-l='"+l[0]+"' class='"+(level===l[0]?"on":"")+"'>"+l[1]+"</button>"});
+    h+="</div><div class='verse' id='vtxt'>";
+    var seed=0;for(var i=0;i<v.id.length;i++)seed+=v.id.charCodeAt(i);
+    var idx=t.map(function(_,i){return i}),order=idx.slice().sort(function(a,b){return ((a*7919+seed)%97)-((b*7919+seed)%97)||a-b});
+    var hide={},cnt=Math.max(1,Math.round(t.length*level));
+    for(var k=0;k<cnt;k++)hide[order[k]]=1;
+    t.forEach(function(x,i){
+      h+=esc(x.pre)+(hide[i]?"<span class='blank' title='Tap to reveal'>"+esc(x.w)+"</span>":esc(x.w))+esc(x.post)+" ";
+    });
+    h+="</div><p class='muted'>Say the verse out loud. Tap a blank to check yourself.</p>";
+  }else if(mode==="letters"){
+    h="<div class='verse' id='vtxt'>";
+    t.forEach(function(x){h+=esc(x.pre)+"<b>"+esc(x.w.charAt(0))+"</b>"+esc(x.w.slice(1).replace(/./g,"_"))+esc(x.post)+" "});
+    h+="</div><p><button class='btn alt sm' id='showfull'>Show full verse</button></p>";
+  }else if(mode==="type"){
+    h="<label>Type the verse from memory</label><textarea id='typed' placeholder='Type here'></textarea><p class='row'><button class='btn' id='chk'>Check</button></p><div id='res'></div>";
+  }else{
+    if(!SR){
+      h="<p>Speaking is not supported in this browser. Chrome on Android, Safari on iPhone, and Edge usually work. You can still use Type it.</p>";
+    }else{
+      h="<p class='muted'>Tap Start and say the verse out loud. Your words appear below. Fix any mistakes, then tap Check.</p><p class='row'><button class='btn' id='mic'>Start speaking</button></p><div id='micmsg' class='muted'></div><textarea id='typed' placeholder='Your spoken words appear here'></textarea><p class='row'><button class='btn' id='chk'>Check</button></p><div id='res'></div>";
+    }
+  }
+  b.innerHTML=h;
+  var lv=document.getElementById("lv");
+  if(lv)lv.onclick=function(e){var l=e.target.getAttribute("data-l");if(!l)return;level=parseFloat(l);render()};
+  var vt=document.getElementById("vtxt");
+  if(vt&&mode==="blanks")vt.onclick=function(e){if(e.target.className.indexOf("blank")===0)e.target.classList.toggle("open")};
+  var sf=document.getElementById("showfull");
+  if(sf)sf.onclick=function(){document.getElementById("vtxt").innerHTML=esc(v.text);sf.remove()};
+  var ck=document.getElementById("chk");
+  if(ck)ck.onclick=function(){checkTyped(v)};
+  var mic=document.getElementById("mic");
+  if(mic)mic.onclick=function(){toggleMic(mic)};
+}
+function toggleMic(btn){
+  var ta=document.getElementById("typed"),msg=document.getElementById("micmsg");
+  if(rec){stopMic();btn.textContent="Start speaking";return}
+  try{
+    var r=new SR();rec=r;
+    r.lang="en-US";r.continuous=true;r.interimResults=true;
+    var base=ta.value?ta.value+" ":"",finalT="";
+    r.onresult=function(e){
+      var interim="";
+      for(var i=e.resultIndex;i<e.results.length;i++){
+        var res=e.results[i];
+        if(res.isFinal)finalT+=res[0].transcript+" ";else interim+=res[0].transcript;
+      }
+      ta.value=base+finalT+interim;
+    };
+    r.onerror=function(e){
+      var t=e.error==="not-allowed"||e.error==="service-not-allowed"?"The microphone is blocked. Allow microphone access for this page and try again. This works from your github.io address, not the Claude preview.":"Microphone problem: "+e.error;
+      if(msg)msg.textContent=t;
+    };
+    r.onend=function(){if(rec===r)rec=null;btn.textContent="Start speaking"};
+    r.start();btn.textContent="Stop";
+    if(msg)msg.textContent="Listening...";
+  }catch(err){if(msg)msg.textContent="Could not start the microphone.";rec=null}
+}
+function norm(w){return w.toLowerCase().replace(/[^a-z0-9]/g,"")}
+function checkTyped(v){
+  var typed=document.getElementById("typed").value.split(/\s+/).filter(Boolean).map(norm).filter(Boolean);
+  var orig=tokens(v.text),o=orig.map(function(x){return norm(x.w)});
+  var n=o.length,m=typed.length,dp=[],i,j;
+  for(i=0;i<=n;i++){dp[i]=[];for(j=0;j<=m;j++)dp[i][j]=0}
+  for(i=1;i<=n;i++)for(j=1;j<=m;j++)dp[i][j]=o[i-1]===typed[j-1]?dp[i-1][j-1]+1:Math.max(dp[i-1][j],dp[i][j-1]);
+  var hit={};i=n;j=m;
+  while(i>0&&j>0){if(o[i-1]===typed[j-1]){hit[i-1]=1;i--;j--}else if(dp[i-1][j]>=dp[i][j-1])i--;else j--}
+  var score=n?Math.round(dp[n][m]/n*100):0,h="<p><b>"+score+"% correct.</b> Words in red were missed.</p><div class='verse'>";
+  orig.forEach(function(x,k){h+=esc(x.pre)+"<span class='"+(hit[k]?"ok":"miss")+"'>"+esc(x.w)+"</span>"+esc(x.post)+" "});
+  document.getElementById("res").innerHTML=h+"</div>";
+}
+function grade(ok){
+  var v=byId(curId);if(!v)return;
+  stopSpeak();stopMic();
+  v.reps=(v.reps||0)+1;
+  if(ok){v.box=Math.min(5,v.box+1);v.due=addDays(GAPS[v.box])}
+  else{v.box=0;v.miss=(v.miss||0)+1;v.due=addDays(1)}
+  v.u=Date.now();
+  var k=dk(new Date());S.history[k]=(S.history[k]||0)+1;
+  save();
+  if(queue.length){nextInQueue();return}
+  var goal=S.settings.goal||3,done=S.history[k]||0;
+  var msg=ok?"Well done. This verse will come back "+(v.box>=5?"in about two weeks.":"in "+GAPS[v.box]+" day"+(GAPS[v.box]===1?"":"s")+"."):"No problem. It will come back tomorrow and show under weak verses until it sticks.";
+  if(done>=goal)msg+=" You reached your daily goal.";
+  var finished=qTotal>0;
+  curId=null;qTotal=0;
+  modal(finished?"Session complete":(ok?"Saved":"Keep going"),"<p>"+esc(msg)+"</p>",[{label:"OK",fn:function(){go("today")}}]);
+}
+
+/* ---------- Library ---------- */
+function translations(){var o={};S.verses.forEach(function(v){if(v.version)o[v.version]=1});return Object.keys(o).sort()}
+function transOptions(){
+  var h="<option value=''>All translations</option>";
+  translations().forEach(function(t){h+="<option value='"+esc(t)+"'"+(lib.tr===t?" selected":"")+">"+esc(t)+"</option>"});
+  return h;
+}
+function statusOptions(){
+  var o=[["","All progress"],["due","Due today"],["weak","Needs work"],["new","Not started"],["mastered","Mastered"]],h="";
+  o.forEach(function(x){h+="<option value='"+x[0]+"'"+(lib.st===x[0]?" selected":"")+">"+x[1]+"</option>"});
+  return h;
+}
+function renderLibrary(){
+  var h="<div class='card'><div class='row sp'><h2 style='margin:0'>Library <span class='muted'>("+S.verses.length+")</span></h2><span class='row'><button class='btn alt sm' onclick='lib.panel=!lib.panel;render()'>Sets</button><button class='btn alt sm' onclick='loadStarters()'>Add starter verses</button><button class='btn sm' onclick='editVerse()'>Add verse</button></span></div>";
+  h+="<div class='filters'><input type='text' id='lq' placeholder='Search words or reference' value='"+esc(lib.q)+"'><select id='ls'>"+setOptions(lib.set,"All sets")+"</select><select id='lt'>"+transOptions()+"</select><select id='lst'>"+statusOptions()+"</select></div></div>";
+  if(lib.panel)h+=setsPanel();
+  h+="<div id='liblist'></div>";
+  return h;
+}
+function matchLib(v){
+  if(lib.q&&(v.ref+" "+v.text).toLowerCase().indexOf(lib.q.toLowerCase())<0)return false;
+  if(lib.set&&v.sets.indexOf(lib.set)<0)return false;
+  if(lib.tr&&(v.version||"")!==lib.tr)return false;
+  if(lib.st==="due"&&v.due>today())return false;
+  if(lib.st==="weak"&&!isWeak(v))return false;
+  if(lib.st==="mastered"&&v.box<5)return false;
+  if(lib.st==="new"&&(v.reps||0)>0)return false;
+  return true;
+}
+function fillLib(){
+  var q=document.getElementById("lq"),s=document.getElementById("ls"),t=document.getElementById("lt"),st=document.getElementById("lst");
+  function upd(){lib.q=q.value;lib.set=s.value;lib.tr=t.value;lib.st=st.value;drawLib()}
+  q.oninput=upd;s.onchange=upd;t.onchange=upd;st.onchange=upd;
+  drawLib();
+}
+function drawLib(){
+  var box=document.getElementById("liblist");if(!box)return;
+  var list=S.verses.filter(matchLib).sort(byAdded);
+  var h="<p class='muted'>Showing "+list.length+" of "+S.verses.length+"</p>";
+  list.forEach(function(v){
+    h+="<div class='card'><div class='row sp'><span><span class='ref'>"+esc(v.ref)+"</span> <span class='muted'>"+esc(v.version||"")+"</span></span><span class='row'>"+(isWeak(v)?"<span class='tag warn'>Needs work</span>":"")+"<span class='tag'>"+boxName(v.box)+"</span></span></div>";
+    var chips=v.sets.map(function(id){var s=getSet(id);return s?"<span class='tag'>"+esc(s.name)+"</span>":""}).join("");
+    if(chips)h+="<div class='chips'>"+chips+"</div>";
+    h+="<div class='muted' style='margin:6px 0'>"+esc(v.text)+"</div><div class='row'>"+
+      "<button class='btn sm' "+oc("practice",v.id)+">Practice</button>"+
+      "<button class='btn alt sm' "+oc("listen",v.id)+">Listen</button>"+
+      "<button class='btn alt sm' onclick='setWeekly(\""+v.id+"\",true)'>Weekly</button>"+
+      "<button class='btn alt sm' "+oc("editVerse",v.id)+">Edit</button>"+
+      "<button class='btn alt sm' onclick='editVerse(null,\""+v.id+"\")'>Other translation</button>"+
+      "<button class='btn alt sm' "+oc("delVerse",v.id)+">Delete</button></div></div>";
+  });
+  if(!list.length)h+="<div class='card'>No verses match. Clear the search or filters to see more.</div>";
+  box.innerHTML=h;
+}
+function setsPanel(){
+  var h="<div class='card'><h2>Sets</h2><p class='muted'>Sets group your verses by topic. A verse can be in more than one set.</p>";
+  S.sets.slice().sort(byName).forEach(function(s){
+    var c=S.verses.filter(function(v){return v.sets.indexOf(s.id)>=0}).length;
+    h+="<div class='row sp' style='margin:6px 0'><span>"+esc(s.name)+" <span class='muted'>("+c+")</span></span><span class='row'><button class='btn alt sm' "+oc("renameSet",s.id)+">Rename</button><button class='btn alt sm' "+oc("delSet",s.id)+">Delete</button></span></div>";
+  });
+  h+="<div class='row' style='margin-top:10px'><input type='text' id='newset' placeholder='New set name' style='flex:1;min-width:180px'><button class='btn sm' onclick='addSet()'>Add set</button></div></div>";
+  return h;
+}
+function addSet(){
+  var n=(document.getElementById("newset").value||"").trim();
+  if(!n)return;
+  for(var i=0;i<S.sets.length;i++)if(S.sets[i].name.toLowerCase()===n.toLowerCase()){notice("Already there","You already have a set with that name.");return}
+  S.sets.push({id:"s_"+uid(),name:n,u:Date.now()});save();render();
+}
+function renameSet(id){
+  var s=getSet(id);if(!s)return;
+  modal("Rename set","<label>Set name</label><input type='text' id='rn' value='"+esc(s.name)+"'>",[{label:"Cancel",cls:"alt"},{label:"Save",fn:function(m){
+    var n=m.querySelector("#rn").value.trim();
+    if(!n){notice("Name needed","Please enter a name.");return false}
+    s.name=n;s.u=Date.now();save();render();
+  }}]);
+}
+function delSet(id){
+  var s=getSet(id);if(!s)return;
+  confirmBox("Delete set","Delete the set "+s.name+"? The verses stay in your Library.","Delete",function(){
+    var t=Date.now();
+    S.sets=S.sets.filter(function(x){return x.id!==id});
+    S.deleted[id]=t;
+    S.verses.forEach(function(v){var i=v.sets.indexOf(id);if(i>=0){v.sets.splice(i,1);v.u=t}});
+    if(lib.set===id)lib.set="";
+    if(pset===id)pset="";
+    save();render();
+  });
+}
+function loadStarters(){
+  var n=addStarters();save();render();
+  notice(n?"Verses added":"Up to date",n?n+" starter verses were added, and the starter sets were refreshed.":"All starter verses are already in your Library. The starter sets were refreshed.");
+}
+function editVerse(id,copyId){
+  var v=id?byId(id):null,src=copyId?byId(copyId):null;
+  var ref=v?v.ref:(src?src.ref:""),ver=v?(v.version||""):(src?"":(S.settings.defTrans||"KJV")),txt=v?v.text:"";
+  var sel=v?v.sets:(src?src.sets:(lib.set?[lib.set]:[]));
+  var body="<label>Reference</label><input type='text' id='f_ref' placeholder='Example: Psalm 46:1' value='"+esc(ref)+"'>"+
+  "<label>Translation</label><input type='text' id='f_ver' list='tlist' placeholder='KJV' value='"+esc(ver)+"'><datalist id='tlist'>"+translations().map(function(t){return "<option value='"+esc(t)+"'>"}).join("")+"</datalist>"+
+  "<label>Verse text</label><textarea id='f_txt' placeholder='Type or paste the verse'>"+esc(txt)+"</textarea>"+
+  "<p class='muted'>Newer translations such as NKJV and ESV are copyrighted, so type or paste those yourself.</p><label>Sets</label>";
+  S.sets.slice().sort(byName).forEach(function(s){
+    body+="<label class='chk'><input type='checkbox' class='setchk' value='"+esc(s.id)+"'"+(sel.indexOf(s.id)>=0?" checked":"")+"> "+esc(s.name)+"</label>";
+  });
+  var title=v?"Edit verse":(src?"Add another translation":"Add verse");
+  modal(title,body,[{label:"Cancel",cls:"alt"},{label:"Save",fn:function(m){
+    var r=m.querySelector("#f_ref").value.trim(),t=m.querySelector("#f_txt").value.replace(/\s+/g," ").trim(),vr=m.querySelector("#f_ver").value.trim();
+    if(!r||!t){notice("Missing information","Please enter both the reference and the verse text.");return false}
+    var picked=[].slice.call(m.querySelectorAll(".setchk")).filter(function(c){return c.checked}).map(function(c){return c.value});
+    var now=Date.now();
+    if(v){v.ref=r;v.text=t;v.version=vr;v.sets=picked;v.u=now}
+    else S.verses.push({id:uid(),ref:r,text:t,version:vr,box:0,due:today(),added:now,reps:0,miss:0,sets:picked,u:now});
+    save();render();
+  }}]);
+}
+function delVerse(id){
+  var v=byId(id);if(!v)return;
+  confirmBox("Delete verse","Delete "+v.ref+" ("+(v.version||"no translation")+")? This cannot be undone.","Delete",function(){
+    S.verses=S.verses.filter(function(x){return x.id!==id});
+    S.deleted[id]=Date.now();
+    if(S.settings.weekly&&S.settings.weekly.id===id){S.settings.weekly=null;S.settings.u=Date.now()}
+    save();render();
+  });
+}
+
+/* ---------- Settings ---------- */
+function setGoal(val){S.settings.goal=parseInt(val,10)||3;S.settings.u=Date.now();save()}
+function setDef(val){S.settings.defTrans=(val||"").trim()||"KJV";S.settings.u=Date.now();save()}
+function setRemindTime(val){DEV.remindTime=val||"08:00";devSave()}
+function toggleNote(on){
+  if(!on){DEV.remindOn=false;devSave();return}
+  if(!window.Notification){notice("Not available","This browser does not support notices. Use the calendar reminder instead.");document.getElementById("rnote").checked=false;return}
+  Notification.requestPermission().then(function(p){
+    if(p==="granted"){DEV.remindOn=true;devSave()}
+    else{DEV.remindOn=false;devSave();document.getElementById("rnote").checked=false;notice("Notices blocked","Allow notices for this page in your browser settings, or use the calendar reminder.")}
+  });
+}
+function downloadReminder(){
+  var t=(DEV.remindTime||"08:00").split(":"),now=new Date();
+  var start=dk(now).replace(/-/g,"")+"T"+t[0]+t[1]+"00";
+  var stamp=now.toISOString().replace(/[-:]/g,"").split(".")[0]+"Z";
+  var url=location.protocol.indexOf("http")===0?location.href.split("#")[0]:"";
+  var L=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Mt Zion//Scripture Memory//EN","BEGIN:VEVENT","UID:scripture-memory-daily@mtzion","DTSTAMP:"+stamp,"DTSTART:"+start,"DURATION:PT15M","RRULE:FREQ=DAILY","SUMMARY:Scripture memory review","DESCRIPTION:Time to review your verses."+(url?" "+url:"")];
+  if(url)L.push("URL:"+url);
+  L.push("BEGIN:VALARM","ACTION:DISPLAY","DESCRIPTION:Scripture memory review","TRIGGER:PT0M","END:VALARM","END:VEVENT","END:VCALENDAR");
+  downloadText(L.join("\r\n"),"scripture-memory-reminder.ics","text/calendar");
+}
+function downloadText(text,name,type){
+  var b=new Blob([text],{type:type});
+  var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;
+  document.body.appendChild(a);a.click();a.remove();
+}
+function maybeNotify(){
+  try{
+    if(DEV.remindOn&&window.Notification&&Notification.permission==="granted"){
+      var n=dueList().length;
+      if(n)new Notification("Scripture Memory",{body:n+" verse"+(n===1?"":"s")+" ready to review today."});
+    }
+  }catch(e){}
+}
+function renderSettings(){
+  var goal=S.settings.goal||3,h="";
+  h+="<div class='card'><h2>Daily goal and defaults</h2><label>Verses to practice each day</label><select onchange='setGoal(this.value)'>";
+  [1,2,3,4,5,6,8,10].forEach(function(n){h+="<option value='"+n+"'"+(goal===n?" selected":"")+">"+n+"</option>"});
+  h+="</select><label>Translation for new verses</label><input type='text' value='"+esc(S.settings.defTrans||"KJV")+"' onchange='setDef(this.value)'></div>";
+  h+="<div class='card'><h2>Reminders</h2><p class='muted'>The best daily alert is your calendar. Pick a time, download the reminder, then open the file on your phone or computer to add it to your calendar.</p><label>Time of day</label><input type='time' value='"+esc(DEV.remindTime||"08:00")+"' onchange='setRemindTime(this.value)'><p class='row'><button class='btn' onclick='downloadReminder()'>Download daily reminder</button></p>"+
+  "<label class='chk'><input type='checkbox' id='rnote'"+(DEV.remindOn?" checked":"")+" onchange='toggleNote(this.checked)'> Also show a notice when I open this app and verses are due</label></div>";
+  h+="<div class='card'><h2>Sync between devices</h2><p class='muted'>1. Make a free account at jsonbin.io. 2. Copy your Master Key from the API Keys page. 3. Paste it below and tap Create new bin. 4. On every other device, paste the same Master Key and the Bin ID shown here, then tap Save.</p>"+
+  "<label>JSONBin Master Key</label><input type='password' id='s_key' value='"+esc(DEV.key)+"' autocomplete='off'><label>Bin ID</label><input type='text' id='s_bin' value='"+esc(DEV.bin)+"' autocomplete='off'>"+
+  "<p class='row'><button class='btn' onclick='saveSync()'>Save</button><button class='btn alt' onclick='createBin()'>Create new bin</button><button class='btn alt' onclick='syncNow(false)'>Sync now</button></p>"+
+  "<p class='muted' id='syncstat'>"+esc(DEV.status||(DEV.bin?"Ready":"Not set up"))+"</p><p class='muted'>Your key stays on this device only. Test syncing from your github.io address; it will not work inside the Claude preview.</p></div>";
+  h+="<div class='card'><h2>Backup</h2><p>Download a backup file to keep your verses safe, or restore from one.</p><p><button class='btn' onclick='doExport()'>Download backup</button></p><label>Restore from a backup file</label><input type='file' id='impf' accept='.json,application/json'><p><button class='btn alt' onclick='doImport()'>Restore</button></p></div>";
+  return h;
+}
+function doExport(){downloadText(JSON.stringify(S,null,2),"scripture-memory-backup.json","application/json")}
+function doImport(){
+  var f=document.getElementById("impf").files[0];
+  if(!f){notice("No file","Choose a backup file first.");return}
+  var rd=new FileReader();
+  rd.onload=function(){
+    try{
+      var d=JSON.parse(rd.result);if(!d.verses||!d.verses.length)throw 0;
+      confirmBox("Restore backup","This replaces the verses on this device with the "+d.verses.length+" in the file.","Restore",function(){
+        var t=Date.now();
+        d.verses.forEach(function(v){v.u=t});
+        S=d;prep();S.settings.u=t;save();go("today");
+      });
+    }catch(e){notice("Problem","That file does not look like a Scripture Memory backup.")}
+  };
+  rd.readAsText(f);
+}
+
+/* ---------- Start ---------- */
+load();
+render();
+maybeNotify();
+if(DEV.key&&DEV.bin){
+  syncNow(true).then(function(){if(view==="today")render()});
+  document.addEventListener("visibilitychange",function(){if(!document.hidden)syncNow(true)});
+}
+
+</script>
+</body>
+</html>
