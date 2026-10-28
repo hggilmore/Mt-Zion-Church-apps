@@ -1,5 +1,6 @@
 <!--
 CHANGELOG (newest first)
+v1.6.2 - No automatic refreshing. Data loads when the app opens or when Refresh is tapped. Removed the 60 second saved data reload and the 2 minute calendar recheck.
 v1.6.1 - Renamed spaces: Senior Classroom (Main Building), Nursery (Main Building), Classroom D (Sunday School Room); calendar events saying senior classroom now match the Senior Classroom.
 v1.6.0 - Fancier look: arched header motif with copper accent, at a glance counts above the room tiles, glossy buttons, status dots, one gentle entrance animation on opening.
 v1.5.1 - Phone home screen fix: setup link that carries the connections to a phone, and editor sign-in is remembered on the device until you sign out.
@@ -1031,18 +1032,13 @@ document.addEventListener('keydown', ev => {
 });
 
 /* ---------- Start ---------- */
+/* v1.6.2: no timers. Saved data and the calendar load when the app opens, and again only when someone taps Refresh. */
 async function init() {
   renderChrome();
   try { S.data = await loadData(); } catch (e) { S.loadErr = e.message + '. Check Settings, and remember saved data only loads from your github.io page, not inside Claude.'; S.data = normalize(null); }
   if (S.editor && !S.loadErr && S.data.editors.length && !S.data.editors.some(e => e.name === S.editor)) signOut();
   try { await ensureCal(true); } catch (e) { S.calErr = 'Calendar problem: ' + e.message; }
   render(); purgeGone();
-  setInterval(async () => {
-    if ($('modalRoot').innerHTML || S.busy) return;
-    try { S.data = await loadData(); S.loadErr = ''; } catch (e) {}
-    render(); purgeGone();
-  }, 60000);
-  setInterval(async () => { if ($('modalRoot').innerHTML) return; try { await ensureCal(true); } catch (e) {} render(); purgeGone(); }, 120000);
 }
 document.body.classList.add('intro'); setTimeout(() => document.body.classList.remove('intro'), 1400);
 init();
