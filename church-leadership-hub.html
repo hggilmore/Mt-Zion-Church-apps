@@ -1,5 +1,7 @@
 <!--
 CHANGELOG
+v1.7.0 - Notes tab: new My private notes view. Private notes are locked with the writer's own PIN (AES encryption), sync to their other devices and cannot be read by others. PIN change re-locks them; a reset PIN needs the old PIN once to unlock older notes.
+v1.6.0 - New Notes tab: leaders add dated notes, grouped by month (newest first), with search, edit and remove by the writer or administrator, and print by month. Shared through the same sync.
 v1.5.14 - Urgent and Follow up cards: Show notes now reveals notes from all of that member's visits, newest first.
 v1.5.13 - File renamed church-leadership-hub.html; Home Screen start address updated.
 v1.5.12 - Heading renamed Mt. Zion Church Leadership Hub (header, tab title, lock screen, Home Screen label).
@@ -169,6 +171,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-of
 }
 .brand .logo{width:52px;height:52px;border-radius:50%;flex:none;box-shadow:0 1px 6px rgba(0,0,0,.35)}
 @media(max-width:480px){.brand .logo{width:44px;height:44px}}
+.noteMonth{border:1px solid var(--line);border-radius:12px;margin:10px 0;overflow:hidden}
+.noteMonth>summary{cursor:pointer;padding:12px 14px;font-weight:700;background:#f4e7f8;color:#410942;list-style:none}
+.noteMonth>summary::-webkit-details-marker{display:none}
+.noteMonth>summary:before{content:"+ ";font-weight:700}.noteMonth[open]>summary:before{content:"- "}
+.noteMonth .nbody{padding:4px 14px 12px}
+.noteText{white-space:pre-wrap;word-wrap:break-word;margin-top:4px}
+html[data-theme=dark] .noteMonth>summary{background:#252c55;color:#e9bff5}
 </style>
 </head>
 <body>
@@ -180,6 +189,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-of
  <button data-tab="prayer"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.5-7-10a4 4 0 017-2.5A4 4 0 0119 10c0 5.5-7 10-7 10z"/></svg><span>Prayer</span></button>
  <button data-tab="reports"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>Reports</span></button>
  <button data-tab="ministries"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span>Ministries</span></button>
+ <button data-tab="notes"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/></svg><span>Notes</span></button>
  <button data-tab="settings"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 12h2M10 12h10M4 17h12M20 17h0"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="18" cy="17" r="2"/></svg><span>Settings</span></button>
 </nav>
 <main>
@@ -308,6 +318,21 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-of
  </div>
 </section>
 
+<section id="tab-notes" class="hide">
+ <div class="card">
+  <h2>Leader Notes</h2>
+  <div class="noprint"><button class="btn sm" id="nvShared" onclick="setNoteView('shared')">Shared notes</button><button class="btn sm ghost" id="nvPrivate" onclick="setNoteView('private')">My private notes</button></div>
+  <p class="muted" id="noteHint" style="margin-top:8px"></p>
+  <div class="noprint" id="noteTools">
+   <button class="btn sm alt" onclick="openNoteModal()">+ Add note</button>
+   <button class="btn sm ghost" onclick="printNotes()">Print shown notes</button>
+   <input id="noteSearch" placeholder="Search notes" style="margin-top:10px">
+  </div>
+  <div id="noteList" style="margin-top:8px"></div>
+  <div id="notePrint" class="hide"></div>
+ </div>
+</section>
+
 <section id="tab-settings" class="hide">
  <div class="card">
   <h2>Saving your data</h2>
@@ -378,7 +403,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-of
 
 <script>
 var LS='deaconVisits_v1', LSC='deaconVisits_cfg';
-var db={members:[],visits:[],prayers:[],deleted:[],users:[],log:[],leaders:[],ministries:[],links:[],settings:{support:'',lock:false,backupBin:'',lastBackup:'',ts:0}};
+var noteOpen={},noteView='shared',pnKey=null,pnKeyUser='',pnPlain=[],pnLocked=[];
+var db={members:[],visits:[],prayers:[],deleted:[],users:[],log:[],leaders:[],ministries:[],notes:[],pnotes:[],links:[],settings:{support:'',lock:false,backupBin:'',lastBackup:'',ts:0}};
 var GROUPS=['Shut-in','Senior','Sick','Bereaved','New Member','Less than one year','Other'];
 var NEWG='Less than one year';
 function joinedRecent(m){
@@ -446,7 +472,7 @@ function unpackDb(o){
   return Promise.resolve(o);
 }
 function saveLocal(){try{localStorage.setItem(LS,JSON.stringify(db))}catch(e){}}
-function norm(){db.prayers=db.prayers||[];db.deleted=db.deleted||[];db.users=db.users||[];db.log=db.log||[];db.leaders=db.leaders||[];db.ministries=db.ministries||[];db.links=db.links||[];sett()}
+function norm(){db.prayers=db.prayers||[];db.deleted=db.deleted||[];db.users=db.users||[];db.log=db.log||[];db.leaders=db.leaders||[];db.ministries=db.ministries||[];db.notes=db.notes||[];db.pnotes=db.pnotes||[];db.links=db.links||[];sett()}
 function mergeList(a,b,dead){
   var map={};
   b.concat(a).forEach(function(x){
@@ -466,6 +492,8 @@ function mergeDb(r){
   db.leaders=mergeList(db.leaders||[],r.leaders||[],dead);
   db.links=mergeList(db.links||[],r.links||[],dead);
   db.ministries=mergeList(db.ministries||[],r.ministries||[],dead);
+  db.notes=mergeList(db.notes||[],r.notes||[],dead);
+  db.pnotes=mergeList(db.pnotes||[],r.pnotes||[],dead);
   db.log=mergeList(db.log||[],r.log||[],dead).sort(function(a,b){return b.ts-a.ts}).slice(0,100);
   if(r.settings&&(r.settings.ts||0)>(sett().ts||0))db.settings=r.settings;
   db.deleted=dead;if((r.adminTs||0)>(db.adminTs||0)){db.adminHash=r.adminHash;db.adminTs=r.adminTs}
@@ -568,11 +596,12 @@ $('restoreFile').addEventListener('change',function(e){
 document.querySelectorAll('nav button').forEach(function(b){
   b.onclick=function(){
     document.querySelectorAll('nav button').forEach(function(x){x.classList.remove('on')});b.classList.add('on');
-    ['log','history','members','prayer','reports','ministries','settings'].forEach(function(t){$('tab-'+t).classList.toggle('hide',t!==b.dataset.tab)});
+    ['log','history','members','prayer','reports','ministries','notes','settings'].forEach(function(t){$('tab-'+t).classList.toggle('hide',t!==b.dataset.tab)});
     if(b.dataset.tab==='history')renderHistory();
     if(b.dataset.tab==='members')renderMembers();
     if(b.dataset.tab==='prayer')renderPrayer();
     if(b.dataset.tab==='ministries')renderMinistries();
+    if(b.dataset.tab==='notes')renderNotes();
   };
 });
 
@@ -684,7 +713,7 @@ function hashPass(pw){
   var h=5381;for(var i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))|0;
   return Promise.resolve('x'+(h>>>0).toString(16));
 }
-function setMe(n){me=n;try{renderToday()}catch(e){}try{localStorage.setItem(LSME,n)}catch(e){}$('sMe').value=n;var d=$('vDeacon');if(d&&!d.value)d.value=n}
+function setMe(n){if(n!==me)pnClear();me=n;try{renderToday()}catch(e){}try{localStorage.setItem(LSME,n)}catch(e){}$('sMe').value=n;var d=$('vDeacon');if(d&&!d.value)d.value=n}
 function saveMe(){if(lockOn()){say('Set by your login','With the PIN lock on, your name comes from your login.');$('sMe').value=me;return}var n=$('sMe').value.trim();if(n.length<2){say('Name needed','Enter your first and last name.');return}setMe(n);renderAll();say('Saved','This device will mark the visits you enter with the name '+n+'.')}
 function askMyName(cb){
   modal('Your name','<p class="muted">Enter your name once on this device. It marks the visits you enter, so you can delete them later.</p><label>Your name</label><input id="myNameIn" placeholder="First and last name">',
@@ -1023,7 +1052,7 @@ function checkLock(){
   }
   if(!el)showLock();
 }
-function showLock(){
+function showLock(){pnClear();
   var o=document.createElement('div');o.id='lockScreen';o.className='overlay';o.style.cssText='z-index:300;background:#10152B';
   var us=db.users.filter(function(u){return u.active!==false}).sort(function(a,b){return a.name.localeCompare(b.name)});
   o.innerHTML='<div class="modal"><h3>Mt. Zion Church Leadership Hub</h3><p class="muted" id="lkHelp">Choose your name and enter your PIN.</p>'+
@@ -1080,7 +1109,7 @@ function addUser(){
 }
 function resetPin(id){
   var u=db.users.filter(function(x){return x.id===id})[0];if(!u)return;
-  modal('New PIN for '+u.name,'<label>New PIN (4 to 8 numbers)</label><input id="npin" type="password" inputmode="numeric" maxlength="8">',[{text:'Cancel',cls:'ghost'},{text:'Save',fn:function(){
+  modal('New PIN for '+u.name,'<p class="muted">If this person has private notes, they stay locked until this person enters their old PIN once under Notes, My private notes.</p><label>New PIN (4 to 8 numbers)</label><input id="npin" type="password" inputmode="numeric" maxlength="8">',[{text:'Cancel',cls:'ghost'},{text:'Save',fn:function(){
     var v=$('npin').value.trim();if(!/^\d{4,8}$/.test(v)){$('npin').style.borderColor='#b3261e';return false}
     hashPin(u.id,v).then(function(h){u.hash=h;u.ts=Date.now();logAct('Reset PIN',u.name);persist();renderAll()});
   }}]);
@@ -1102,7 +1131,7 @@ function changeMyPin(){
     if(!/^\d{4,8}$/.test(v)){$('npin').style.borderColor='#b3261e';return false}
     hashPin(u.id,o).then(function(h){
       if(h!==u.hash){say('Wrong PIN','Your current PIN does not match.');return}
-      hashPin(u.id,v).then(function(h2){u.hash=h2;u.ts=Date.now();logAct('Changed own PIN',u.name);persist();say('Saved','Your PIN was changed.')});
+      pnRekey(u,o,v).then(function(){hashPin(u.id,v).then(function(h2){u.hash=h2;u.ts=Date.now();logAct('Changed own PIN',u.name);persist();say('Saved','Your PIN was changed.')})});
     });
   }}]);
 }
@@ -1165,7 +1194,7 @@ function restoreOnline(){
 /* help, privacy, welcome */
 function showPrivacy(cb,first){
   var body='<p>This app holds private information about members of Mt. Zion Baptist Church. Please read and follow these points.</p><ul style="padding-left:18px">'+
-   '<li>Stored here: names, phone numbers, email addresses, addresses, birthdays, ministry assignments, visit notes, prayer requests, who entered each record, and a log of changes.</li>'+
+   '<li>Stored here: names, phone numbers, email addresses, addresses, birthdays, leader notes (private notes are stored locked with the writer PIN), ministry assignments, visit notes, prayer requests, who entered each record, and a log of changes.</li>'+
    '<li>Kept in two places: on your device, and in the church\'s private online storage that every deacon and the pastor share.</li>'+
    '<li>Who can see it: only the deacons and pastor who were given the app link. The PIN lock keeps a lost or shared phone from opening the app; it is not the same as scrambling the data.</li>'+
    '<li>Keep notes respectful and limited to what is needed to care for the member. Do not share member information outside the deacon ministry, and do not post it or send screenshots.</li>'+
@@ -1497,7 +1526,7 @@ $('importFile').addEventListener('change',function(e){
   rd.readAsText(f);e.target.value='';
 });
 
-function renderAll(){renderToday();renderUrgent();renderCare();renderOcc();updateBadge();fillSelects();fillExtra();renderFollow();renderHistory();renderMembers();renderPrayer();renderAdmin();renderMinistries();renderLinks();checkLock()}
+function renderAll(){renderToday();renderUrgent();renderCare();renderOcc();updateBadge();fillSelects();fillExtra();renderFollow();renderHistory();renderMembers();renderPrayer();renderAdmin();renderMinistries();renderNotes();renderLinks();checkLock()}
 function b64u(t){return btoa(unescape(encodeURIComponent(t))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 function unb64u(t){t=t.replace(/-/g,'+').replace(/_/g,'/');while(t.length%4)t+='=';return decodeURIComponent(escape(atob(t)))}
 function makeSetupLink(){
@@ -1537,6 +1566,153 @@ window.addEventListener('online',function(){if(pending()&&cloudReady())pushCloud
 if(cloudReady()){if(pending())pushCloud(false);else pullCloud(false)}
 setTimeout(autoBackup,5000);
 if(setupDone)say('Connected','This device is now connected to the shared list. Your names will load in a moment. Next, open Settings and save your name, then add this page to your Home Screen.');
+
+/* ---------- v1.6.0 notes, v1.7.0 private notes ---------- */
+function pnOk(){return !!(window.crypto&&crypto.subtle&&window.TextEncoder)}
+function b64e(buf){var a=new Uint8Array(buf),t='';for(var i=0;i<a.length;i++)t+=String.fromCharCode(a[i]);return btoa(t)}
+function b64d(t){var x=atob(t),a=new Uint8Array(x.length);for(var i=0;i<x.length;i++)a[i]=x.charCodeAt(i);return a}
+function pnDerive(uid,pin){
+  return crypto.subtle.importKey('raw',new TextEncoder().encode(pin),'PBKDF2',false,['deriveKey']).then(function(k){
+    return crypto.subtle.deriveKey({name:'PBKDF2',salt:new TextEncoder().encode('mtzion-pn|'+uid),iterations:200000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+  });
+}
+function pnEnc(key,obj){
+  var iv=crypto.getRandomValues(new Uint8Array(12));
+  return crypto.subtle.encrypt({name:'AES-GCM',iv:iv},key,new TextEncoder().encode(JSON.stringify(obj))).then(function(ct){return {iv:b64e(iv),ct:b64e(ct)}});
+}
+function pnDec(key,rec){
+  return crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(rec.iv)},key,b64d(rec.ct)).then(function(b){return JSON.parse(new TextDecoder().decode(b))}).catch(function(){return null});
+}
+function pnClear(){pnKey=null;pnKeyUser='';pnPlain=[];pnLocked=[];try{if(noteView==='private')renderNotes()}catch(e){}}
+function pnMine(){var u=myUser();return u?db.pnotes.filter(function(r){return r.owner===u.id}):[]}
+function pnLoad(){
+  var recs=pnMine();pnPlain=[];pnLocked=[];
+  return Promise.all(recs.map(function(r){return pnDec(pnKey,r).then(function(o){if(o){o.id=r.id;o.ts=r.ts;pnPlain.push(o)}else pnLocked.push(r)})})).then(function(){renderNotes()});
+}
+function pnUnlock(){
+  var u=myUser();if(!u)return;
+  modal('Open private notes','<p>Enter your sign in PIN.</p><input id="pnPin" type="password" inputmode="numeric" maxlength="8">',[{text:'Cancel',cls:'ghost'},{text:'Open',fn:function(){
+    var v=$('pnPin').value.trim();
+    hashPin(u.id,v).then(function(h){
+      if(h!==u.hash){say('Wrong PIN','That PIN does not match.');return}
+      pnDerive(u.id,v).then(function(k){pnKey=k;pnKeyUser=u.id;pnLoad()});
+    });
+  }}]);
+}
+function pnUnlockOld(){
+  var u=myUser();if(!u||!pnKey)return;
+  modal('Unlock older notes','<p>Enter the PIN you used before.</p><input id="pnOld" type="password" inputmode="numeric" maxlength="8">',[{text:'Cancel',cls:'ghost'},{text:'Unlock',fn:function(){
+    var v=$('pnOld').value.trim();
+    pnDerive(u.id,v).then(function(ok){
+      return Promise.all(pnLocked.map(function(r){return pnDec(ok,r).then(function(o){if(!o)return 0;return pnEnc(pnKey,o).then(function(e){r.iv=e.iv;r.ct=e.ct;r.ts=Date.now();return 1})})}));
+    }).then(function(res){var n=res.reduce(function(a,b){return a+b},0);if(n)persist();return pnLoad().then(function(){say('Older notes',n?n+' note(s) unlocked.':'That PIN did not unlock any notes.')})});
+  }}]);
+}
+function pnDropLocked(){
+  ask('Delete locked notes','Delete these '+pnLocked.length+' locked note(s)? They cannot be recovered.','Delete',function(){
+    pnLocked.forEach(function(r){db.deleted.push(r.id)});
+    var ids=pnLocked.map(function(r){return r.id});
+    db.pnotes=db.pnotes.filter(function(r){return ids.indexOf(r.id)<0});persist();pnLoad();
+  });
+}
+function pnRekey(u,oldPin,newPin){
+  if(!pnOk())return Promise.resolve();
+  var recs=db.pnotes.filter(function(r){return r.owner===u.id});
+  if(!recs.length&&!pnKey)return Promise.resolve();
+  return Promise.all([pnDerive(u.id,oldPin),pnDerive(u.id,newPin)]).then(function(ks){
+    return Promise.all(recs.map(function(r){return pnDec(ks[0],r).then(function(o){if(!o)return;return pnEnc(ks[1],o).then(function(e){r.iv=e.iv;r.ct=e.ct;r.ts=Date.now()})})})).then(function(){
+      if(pnKey&&pnKeyUser===u.id){pnKey=ks[1];return pnLoad()}
+    });
+  }).catch(function(){});
+}
+function setNoteView(v){
+  var u=myUser();
+  if(v==='private'){
+    if(!lockOn()||!u){say('Private notes','Private notes need a PIN sign in. Ask the administrator to add you under Deacon logins and turn on PIN logins.');return}
+    if(!pnOk()){say('Private notes','This browser cannot lock notes. Open the app from your github.io link in Safari or Chrome.');return}
+  }
+  noteView=v;renderNotes();
+  if(v==='private'&&(!pnKey||pnKeyUser!==u.id))pnUnlock();
+}
+function noteMonthKey(n){return (n.date||'').slice(0,7)||'0000-00'}
+function noteMonthLabel(k){var p=k.split('-');if(p.length<2||k==='0000-00')return 'No date';return new Date(p[0],p[1]-1,1).toLocaleDateString(undefined,{month:'long',year:'numeric'})}
+function noteSource(){return noteView==='private'?pnPlain:db.notes}
+function notesShown(){
+  var q=($('noteSearch')&&$('noteSearch').value||'').trim().toLowerCase();
+  return noteSource().filter(function(n){return !q||((n.title||'')+' '+(n.text||'')+' '+(n.author||'')).toLowerCase().indexOf(q)>-1})
+   .sort(function(a,b){return (b.date||'').localeCompare(a.date||'')||(b.ts||0)-(a.ts||0)});
+}
+function noteHtml1(n,withBtns){
+  var priv=noteView==='private',can=priv||canDelete({enteredBy:n.author});
+  return '<div class="item"><b>'+esc(fmtDate(n.date))+(n.title?' | '+esc(n.title):'')+'</b>'+(!priv&&n.author?' <span class="muted">by '+esc(n.author)+'</span>':'')+
+   '<div class="noteText">'+esc(n.text)+'</div>'+
+   (withBtns&&can?'<div style="margin-top:6px"><button class="btn sm ghost" onclick="openNoteModal(\''+n.id+'\')">Edit</button><button class="btn sm red" onclick="deleteNote(\''+n.id+'\')">Remove</button></div>':'')+'</div>';
+}
+function groupNotes(list){
+  var g={},order=[];
+  list.forEach(function(n){var k=noteMonthKey(n);if(!g[k]){g[k]=[];order.push(k)}g[k].push(n)});
+  order.sort(function(a,b){return b.localeCompare(a)});
+  return {g:g,order:order};
+}
+function renderNotes(){
+  var el=$('noteList');if(!el)return;
+  var priv=noteView==='private';
+  $('nvShared').className='btn sm'+(priv?' ghost':'');$('nvPrivate').className='btn sm'+(priv?'':' ghost');
+  $('noteHint').textContent=priv?'Only you can read these. They are locked with your sign in PIN and follow you to your other devices. A longer PIN (6 to 8 numbers) keeps them safer.':'Notes are grouped by month, newest first. Everyone who signs in can read these shared notes.';
+  $('noteTools').classList.toggle('hide',priv&&!pnKey);
+  if(priv&&!pnKey){el.innerHTML='<p class="muted">Your private notes are locked.</p><button class="btn sm" onclick="pnUnlock()">Unlock with my PIN</button>';return}
+  var banner=(priv&&pnLocked.length)?'<div class="item"><b>'+pnLocked.length+' older private note'+(pnLocked.length===1?' is':'s are')+' locked with a previous PIN.</b><div class="muted">This can happen after an administrator resets your PIN.</div><div style="margin-top:6px"><button class="btn sm" onclick="pnUnlockOld()">Unlock with an older PIN</button><button class="btn sm red" onclick="pnDropLocked()">Delete them</button></div></div>':'';
+  var q=($('noteSearch').value||'').trim(),gr=groupNotes(notesShown()),cur=today().slice(0,7);
+  if(!gr.order.length){el.innerHTML=banner+'<p class="muted">'+(q?'No notes match your search.':(priv?'No private notes yet. Press Add note to write one.':'No notes yet. Press Add note to write the first one.'))+'</p>';return}
+  el.innerHTML=banner+gr.order.map(function(k,i){
+    var open=q?true:(noteOpen.hasOwnProperty(k)?noteOpen[k]:(k===cur||i===0));
+    return '<details class="noteMonth" data-k="'+k+'"'+(open?' open':'')+'><summary>'+esc(noteMonthLabel(k))+' <span class="pill mid">'+gr.g[k].length+(gr.g[k].length===1?' note':' notes')+'</span></summary><div class="nbody">'+
+     '<div class="noprint" style="margin-top:6px"><button class="btn sm ghost" onclick="printNotes(\''+k+'\')">Print this month</button></div>'+
+     gr.g[k].map(function(n){return noteHtml1(n,true)}).join('')+'</div></details>';
+  }).join('');
+  [].slice.call(el.querySelectorAll('details')).forEach(function(d){d.addEventListener('toggle',function(){noteOpen[d.dataset.k]=d.open})});
+}
+function printNotes(k){
+  var gr=groupNotes(notesShown()),keys=k?[k]:gr.order,base=noteView==='private'?'Private Notes':'Leader Notes';
+  if(!keys.length){say('Nothing to print','There are no notes to print.');return}
+  $('notePrint').innerHTML=keys.map(function(x){return '<h2>'+esc(noteMonthLabel(x))+'</h2>'+(gr.g[x]||[]).map(function(n){return noteHtml1(n,false)}).join('')}).join('');
+  printReport('notePrint',k?base+' '+noteMonthLabel(k):base);
+}
+function openNoteModal(id){
+  var priv=noteView==='private';
+  var n=id?noteSource().filter(function(x){return x.id===id})[0]:{date:today(),title:'',text:''};
+  if(!n)return;
+  modal((id?'Edit ':'Add a ')+(priv?'private note':'note'),
+   '<label>Date</label><input type="date" id="nDate" value="'+esc(n.date)+'"><label>Title (optional)</label><input id="nTitle" maxlength="80" placeholder="Example: Deacon meeting" value="'+esc(n.title||'')+'">'+
+   '<label>Note</label><textarea id="nText" rows="8">'+esc(n.text||'')+'</textarea>',
+   [{text:'Cancel',cls:'ghost'},{text:'Save',fn:function(){
+     var t=$('nText').value.trim(),d=$('nDate').value||today(),ti=$('nTitle').value.trim();
+     if(!t){$('nText').style.borderColor='#b3261e';return false}
+     noteOpen[d.slice(0,7)]=true;
+     if(priv){
+       var u=myUser();if(!u||!pnKey){say('Locked','Unlock your private notes first.');return}
+       pnEnc(pnKey,{date:d,title:ti,text:t}).then(function(e){
+         if(id){var r=db.pnotes.filter(function(x){return x.id===id})[0];if(r){r.iv=e.iv;r.ct=e.ct;r.ts=Date.now()}}
+         else db.pnotes.push({id:uid(),owner:u.id,iv:e.iv,ct:e.ct,ts:Date.now()});
+         persist();pnLoad();
+       });
+       return;
+     }
+     if(id){n.date=d;n.title=ti;n.text=t;n.ts=Date.now()}
+     else db.notes.push({id:uid(),date:d,title:ti,text:t,author:me||'',ts:Date.now()});
+     logAct(id?'Edited note':'Added note',(ti||d));persist();renderAll();
+   }}]);
+}
+function deleteNote(id){
+  var priv=noteView==='private';
+  var n=noteSource().filter(function(x){return x.id===id})[0];if(!n)return;
+  ask('Remove note','Remove this note from '+fmtDate(n.date)+'?'+(priv?'':' This removes it for everyone.'),'Remove',function(){
+    db.deleted.push(id);
+    if(priv){db.pnotes=db.pnotes.filter(function(x){return x.id!==id});persist();pnLoad();return}
+    logAct('Removed note',n.title||n.date);db.notes=db.notes.filter(function(x){return x.id!==id});persist();renderAll();
+  });
+}
+$('noteSearch').addEventListener('input',renderNotes);
 </script>
 </body>
 </html>
