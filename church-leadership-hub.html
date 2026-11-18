@@ -1,5 +1,6 @@
 <!--
 CHANGELOG
+v1.7.2 - Reports: new Share Report button sends the report as plain text through the phone share sheet (Messenger, Messages, email) or copies it.
 v1.7.1 - Reports no longer list members not contacted; removed that section and its days box.
 v1.7.0 - Notes tab: new My private notes view. Private notes are locked with the writer's own PIN (AES encryption), sync to their other devices and cannot be read by others. PIN change re-locks them; a reset PIN needs the old PIN once to unlock older notes.
 v1.6.0 - New Notes tab: leaders add dated notes, grouped by month (newest first), with search, edit and remove by the writer or administrator, and print by month. Shared through the same sync.
@@ -277,6 +278,7 @@ html[data-theme=dark] .noteMonth>summary{background:#252c55;color:#e9bff5}
    <div><label>Member group</label><select id="rGroup"></select></div>
   </div>
   <button class="btn" onclick="runReport()">Run Report</button>
+  <button class="btn alt" onclick="shareReport()">Share Report</button>
   <button class="btn alt" onclick="printReport('reportOut','Visitation Report')">Print</button>
   <button class="btn ghost" onclick="printReport('reportOut','Visitation Report',true)">Save Report File</button>
   <button class="btn ghost" onclick="exportCSV()">Download CSV</button>
@@ -1707,6 +1709,30 @@ function deleteNote(id){
   });
 }
 $('noteSearch').addEventListener('input',renderNotes);
+
+/* ---------- v1.7.2 share report as text ---------- */
+function reportToText(){
+  var src=$('reportOut'),out=[];
+  if(!src||!src.innerHTML||src.innerHTML.indexOf('press Run Report')>-1)return '';
+  [].slice.call(src.children).forEach(function(n){
+    var cn=String(n.className||'');
+    if(n.tagName==='H2')out.push('','== '+n.textContent.trim()+' ==');
+    else if(cn.indexOf('stats')>-1)[].slice.call(n.querySelectorAll('.stat')).forEach(function(x){var b=x.querySelector('b');if(b)out.push(x.textContent.slice(b.textContent.length).trim()+': '+b.textContent)});
+    else if(cn.indexOf('scroll')>-1)[].slice.call(n.querySelectorAll('tr')).forEach(function(r,i){var c=[].slice.call(r.children).map(function(x){return x.textContent.trim()}).filter(Boolean);if(c.length&&i>0)out.push('- '+c.join(' | '))});
+    else if(n.textContent.trim())out.push(n.textContent.trim());
+  });
+  return out.join('\n').trim();
+}
+function shareReport(){
+  var t=reportToText();
+  if(!t){say('Nothing to share','Run a report first, then press Share Report.');return}
+  function fallback(){
+    function showBox(){modal('Copy the report','<p>Select all of the text below, copy it, and paste it into your message.</p><textarea id="rpTxt" rows="10" readonly>'+esc(t)+'</textarea>',[{text:'Close'}]);setTimeout(function(){var a=$('rpTxt');if(a){a.focus();a.select()}},50)}
+    try{navigator.clipboard.writeText(t).then(function(){say('Report copied','The report text was copied. Open your message and paste it.')},showBox)}catch(e){showBox()}
+  }
+  if(navigator.share){navigator.share({title:'Mt. Zion Visitation Report',text:t}).catch(function(e){if(!e||e.name!=='AbortError')fallback()})}
+  else fallback();
+}
 </script>
 </body>
 </html>
