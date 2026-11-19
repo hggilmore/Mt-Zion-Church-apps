@@ -1,5 +1,7 @@
 <!--
 CHANGELOG
+v1.8.1 - Members: Non-member tick (visitors and friends of the church) with its own list; a short message after adding a name says whether it reached the shared list; names are saved on the device first and sent automatically.
+v1.8.0 - Members: Active tick box on every name; Active, Inactive and All lists with counts. Inactive names are left out of the visit, prayer and care pickers, birthdays and the needs-a-call count, but keep their history and can be made active again.
 v1.7.4 - Reports: new Text Message button opens the Messages app with the report text in a new message; remembers the phone number.
 v1.7.3 - Reports: new Email with Gmail button opens a Gmail message with the report in the body (Gmail app first, Gmail website if the app is not installed); remembers the To address.
 v1.7.2 - Reports: new Share Report button sends the report as plain text through the phone share sheet (Messenger, Messages, email) or copies it.
@@ -182,6 +184,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-of
 .noteMonth .nbody{padding:4px 14px 12px}
 .noteText{white-space:pre-wrap;word-wrap:break-word;margin-top:4px}
 html[data-theme=dark] .noteMonth>summary{background:#252c55;color:#e9bff5}
+.actchk{float:right;display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600;margin:0 0 0 8px}
+.actchk input{width:22px;height:22px;margin:0}
+.item.inactive{opacity:.8;background:#f2f2f2}
+html[data-theme=dark] .item.inactive{background:#1c2142}
+.actbox{float:right;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.actbox .actchk{float:none;margin:0}
+#toastBox{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:#410942;color:#fff;padding:12px 16px;border-radius:12px;z-index:9999;max-width:90%;font-size:15px;box-shadow:0 4px 14px rgba(0,0,0,.35);display:none}
+#toastBox.show{display:block}
 </style>
 </head>
 <body>
@@ -259,6 +269,8 @@ html[data-theme=dark] .noteMonth>summary{background:#252c55;color:#e9bff5}
   <button class="btn sm ghost" onclick="openBulkModal()">Add several names</button>
   <button class="btn sm ghost" onclick="$('importFile').click()">Import spreadsheet (CSV)</button>
   <input type="file" id="importFile" accept=".csv,text/csv" class="hide">
+  <div class="noprint" style="margin-top:10px"><button class="btn sm" id="mvActive" onclick="setMemView('active')">Active</button><button class="btn sm ghost" id="mvInactive" onclick="setMemView('inactive')">Inactive</button><button class="btn sm ghost" id="mvNon" onclick="setMemView('non')">Non-members</button><button class="btn sm ghost" id="mvAll" onclick="setMemView('all')">All</button></div>
+  <p class="muted" id="mvHint" style="margin:6px 0 0"></p>
   <input id="mSearch" placeholder="Search names" style="margin-top:10px"><label>Group</label><select id="mGroup"></select>
   <div id="memList" style="margin-top:8px"></div>
  </div>
@@ -409,7 +421,7 @@ html[data-theme=dark] .noteMonth>summary{background:#252c55;color:#e9bff5}
 
 <script>
 var LS='deaconVisits_v1', LSC='deaconVisits_cfg';
-var noteOpen={},noteView='shared',pnKey=null,pnKeyUser='',pnPlain=[],pnLocked=[];
+var memView='active',noteOpen={},noteView='shared',pnKey=null,pnKeyUser='',pnPlain=[],pnLocked=[];
 var db={members:[],visits:[],prayers:[],deleted:[],users:[],log:[],leaders:[],ministries:[],notes:[],pnotes:[],links:[],settings:{support:'',lock:false,backupBin:'',lastBackup:'',ts:0}};
 var GROUPS=['Shut-in','Senior','Sick','Bereaved','New Member','Less than one year','Other'];
 var NEWG='Less than one year';
@@ -504,7 +516,7 @@ function mergeDb(r){
   if(r.settings&&(r.settings.ts||0)>(sett().ts||0))db.settings=r.settings;
   db.deleted=dead;if((r.adminTs||0)>(db.adminTs||0)){db.adminHash=r.adminHash;db.adminTs=r.adminTs}
 }
-function persist(){db.updated=new Date().toISOString();saveLocal();pushCloud(false)}
+function persist(){db.updated=new Date().toISOString();saveLocal();return pushCloud(false)}
 
 function httpErr(st){var e=new Error('HTTP '+st);e.status=st;return e}
 function friendly(e){
@@ -535,9 +547,9 @@ function pending(){try{return localStorage.getItem(LSPEND)==='1'}catch(e){return
 function markPending(){try{localStorage.setItem(LSPEND,'1')}catch(e){}var m=$('syncMsg');if(m)m.textContent='Offline. Saved on this phone; will send when you are back online.'}
 function clearPending(){try{localStorage.removeItem(LSPEND)}catch(e){}}
 function pushCloud(show){
-  if(!cloudReady()){if(show)setStatus('Add your Master Key and Bin ID first.',false);return}
-  if(navigator.onLine===false){markPending();return}
-  fetch('https://api.jsonbin.io/v3/b/'+cfg.bin+'/latest',{headers:{'X-Master-Key':cfg.key,'X-Bin-Meta':'false'}})
+  if(!cloudReady()){if(show)setStatus('Add your Master Key and Bin ID first.',false);return Promise.resolve()}
+  if(navigator.onLine===false){markPending();return Promise.resolve()}
+  return fetch('https://api.jsonbin.io/v3/b/'+cfg.bin+'/latest',{headers:{'X-Master-Key':cfg.key,'X-Bin-Meta':'false'}})
   .then(function(r){if(!r.ok)throw httpErr(r.status);return r.json()}).then(unpackDb)
   .then(function(r){
     if(r&&r.members&&r.visits){mergeDb(r);saveLocal();renderAll()}
@@ -613,6 +625,15 @@ document.querySelectorAll('nav button').forEach(function(b){
 
 /* ---------- members ---------- */
 function sortedMembers(){return db.members.slice().sort(function(a,b){return a.name.localeCompare(b.name)})}
+function isActive(m){return m.active!==false}
+function isNon(m){return !!m.nonmember}
+function toggleNon(id,on){var m=db.members.find(function(x){return x.id===id});if(!m)return;m.nonmember=!!on;m.ts=Date.now();logAct(on?'Marked non-member':'Marked member',m.name);persist();renderAll()}
+var toastT=null;
+function toast(msg){var t=$('toastBox');if(!t){t=document.createElement('div');t.id='toastBox';t.setAttribute('role','status');document.body.appendChild(t)}t.textContent=msg;t.className='show';clearTimeout(toastT);toastT=setTimeout(function(){t.className=''},6000)}
+function savedNote(p,name){Promise.resolve(p).then(function(){toast(!cloudReady()?name+' was saved on this phone only. Connect to the shared data in Settings so others see it.':(pending()?name+' was saved on this phone. It has not reached the shared list yet, and will send automatically when you are online.':name+' was saved to the shared list. Others will see it after they refresh.'))})}
+function activeMembers(){return sortedMembers().filter(isActive)}
+function setMemView(v){memView=v;renderMembers()}
+function toggleActive(id,on){var m=db.members.find(function(x){return x.id===id});if(!m)return;m.active=!!on;m.ts=Date.now();logAct(on?'Marked active':'Marked inactive',m.name);persist();renderAll()}
 function openMemberModal(id){
   var m=id?db.members.find(function(x){return x.id===id}):{name:'',phone:'',address:'',notes:'',joined:''};
   modal(id?'Edit name':'Add a name',
@@ -623,14 +644,15 @@ function openMemberModal(id){
    '<div class="muted">Anyone who joined in the last 12 months is placed in Less than one year automatically.</div>'+
    '<label>Birthday</label>'+mdPicker('mBd',m.bday)+'<label>Wedding anniversary</label>'+mdPicker('mAn',m.anniv)+
    '<label>Notes (caregiver, special needs, etc.)</label><textarea id="mNotes">'+esc(m.notes)+'</textarea>'+
-   '<label>Groups</label><div class="chips">'+GROUPS.map(function(g){return '<label><input type="checkbox" class="mg" value="'+g+'"'+((m.groups||[]).indexOf(g)>-1?' checked':'')+'>'+g+'</label>'}).join('')+'</div>',
+   '<label><input type="checkbox" id="mNon"'+(m.nonmember?' checked':'')+'> Non-member (visitor or friend of the church)</label>'+'<label>Groups</label><div class="chips">'+GROUPS.map(function(g){return '<label><input type="checkbox" class="mg" value="'+g+'"'+((m.groups||[]).indexOf(g)>-1?' checked':'')+'>'+g+'</label>'}).join('')+'</div>',
    [{text:'Cancel',cls:'ghost'},{text:'Save',fn:function(){
      var n=$('mName').value.trim();
      if(!n){$('mName').style.borderColor='#b3261e';return false}
-     if(id){m.name=n;m.phone=$('mPhone').value.trim();m.address=$('mAddr').value.trim();m.joined=$('mJoined').value;m.bday=mdGet('mBd');m.anniv=mdGet('mAn');m.notes=$('mNotes').value.trim();m.groups=getGroups();m.ts=Date.now()}
-     else{var nm={id:uid(),name:n,phone:$('mPhone').value.trim(),address:$('mAddr').value.trim(),joined:$('mJoined').value,bday:mdGet('mBd'),anniv:mdGet('mAn'),notes:$('mNotes').value.trim(),groups:getGroups(),ts:Date.now()};db.members.push(nm);window._newMember=nm.id}
+     if(id){m.name=n;m.phone=$('mPhone').value.trim();m.address=$('mAddr').value.trim();m.joined=$('mJoined').value;m.bday=mdGet('mBd');m.anniv=mdGet('mAn');m.notes=$('mNotes').value.trim();m.groups=getGroups();m.nonmember=$('mNon').checked;m.ts=Date.now()}
+     else{var nm={nonmember:$('mNon').checked,id:uid(),name:n,phone:$('mPhone').value.trim(),address:$('mAddr').value.trim(),joined:$('mJoined').value,bday:mdGet('mBd'),anniv:mdGet('mAn'),notes:$('mNotes').value.trim(),groups:getGroups(),ts:Date.now()};db.members.push(nm);window._newMember=nm.id}
      logAct(id?'Edited name':'Added name',n);
-     persist();renderAll();
+     var pp=persist();renderAll();
+     if(!id){savedNote(pp,n)}
      if(!id&&window._newMember){$('vMember').value=window._newMember;window._newMember=null}
    }}]);
 }
@@ -674,7 +696,7 @@ function renderToday(){
   var last={};db.visits.forEach(function(v){var k=v.memberId;if(!last[k]||v.date>last[k])last[k]=v.date});
   var cut=new Date();cut.setDate(cut.getDate()-60);
   var cs=cut.getFullYear()+'-'+String(cut.getMonth()+1).padStart(2,'0')+'-'+String(cut.getDate()).padStart(2,'0');
-  var need=db.members.filter(function(m){return !last[m.id]||last[m.id]<cs}).length;
+  var need=db.members.filter(function(m){return isActive(m)&&!isNon(m)&&(!last[m.id]||last[m.id]<cs)}).length;
   var mon=new Date().toLocaleDateString(undefined,{month:'long'});
   el.innerHTML='<h2>Today at a glance</h2><div class="muted">'+esc(new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'}))+'</div>'+
    '<div class="stats"><div class="stat"><b>'+mv.length+'</b>Contacts in '+esc(mon)+'</div><div class="stat"><b>'+Object.keys(reached).length+'</b>Members reached</div><div class="stat'+(open?' warn':'')+'"><b>'+open+'</b>Follow ups open ('+due+' due)</div><div class="stat'+(need?' warn':'')+'"><b>'+need+'</b>Not contacted in 60 days</div></div>';
@@ -685,10 +707,14 @@ function lastContact(id){
 }
 function renderMembers(){
   var q=$('mSearch').value.toLowerCase(),g=$('mGroup').value,h='';
-  sortedMembers().filter(function(m){return m.name.toLowerCase().indexOf(q)>-1&&(!g||hasGroup(m,g))}).forEach(function(m){
+  var nn=db.members.filter(isNon).length,na=db.members.filter(function(m){return isActive(m)&&!isNon(m)}).length,ni=db.members.filter(function(m){return !isActive(m)&&!isNon(m)}).length;
+  $('mvActive').textContent='Active ('+na+')';$('mvInactive').textContent='Inactive ('+ni+')';$('mvNon').textContent='Non-members ('+nn+')';$('mvAll').textContent='All ('+db.members.length+')';
+  $('mvActive').className='btn sm'+(memView==='active'?'':' ghost');$('mvInactive').className='btn sm'+(memView==='inactive'?'':' ghost');$('mvNon').className='btn sm'+(memView==='non'?'':' ghost');$('mvAll').className='btn sm'+(memView==='all'?'':' ghost');
+  $('mvHint').textContent=memView==='inactive'?'These names are hidden from the visit, prayer and birthday lists. Tick Active to bring one back.':(memView==='non'?'Visitors and friends of the church. They can still be visited and logged. Untick Non-member when someone joins.':'Untick Active to move a name to the Inactive list. Tick Non-member for a visitor or friend of the church. Visit history is kept.');
+  sortedMembers().filter(function(m){return m.name.toLowerCase().indexOf(q)>-1&&(!g||hasGroup(m,g))&&(memView==='all'||(memView==='non'?isNon(m):(!isNon(m)&&(memView==='active'?isActive(m):!isActive(m)))))}).forEach(function(m){
     var lc=lastContact(m.id);
     var dd=lc?daysSince(lc.date):null,pc=dd===null?'late':(dd<=30?'good':(dd<=60?'mid':'late')),pt=dd===null?'Not yet contacted':(dd<=0?'Contacted today':'Contacted '+dd+' day'+(dd===1?'':'s')+' ago');
-    h+='<div class="item"><div class="mem"><div class="av">'+esc(initials(m.name))+'</div><div class="body"><b>'+esc(m.name)+'</b><span class="pill '+pc+'">'+pt+'</span>'+
+    h+='<div class="item'+(isActive(m)?'':' inactive')+'"><div class="mem"><div class="av">'+esc(initials(m.name))+'</div><div class="body"><div class="actbox"><label class="actchk"><input type="checkbox"'+(isActive(m)?' checked':'')+' onchange="toggleActive(\''+m.id+'\',this.checked)"> Active</label><label class="actchk"><input type="checkbox"'+(isNon(m)?' checked':'')+' onchange="toggleNon(\''+m.id+'\',this.checked)"> Non-member</label></div><b>'+esc(m.name)+'</b>'+(isActive(m)?'':' <span class="pill late">Inactive</span>')+(isNon(m)?' <span class="pill mid">Non-member</span>':'')+'<span class="pill '+pc+'">'+pt+'</span>'+
       (effGroups(m).length?'<div>'+effGroups(m).map(function(x){return '<span class="gtag">'+esc(x)+'</span>'}).join('')+'</div>':'')+
       '<div class="muted">'+(m.phone?esc(m.phone)+'  ':'')+(m.address?esc(m.address):'')+'</div>'+
       (m.joined?'<div class="muted">Joined '+fmtDate(m.joined)+'</div>':'')+
@@ -696,11 +722,11 @@ function renderMembers(){
       (m.care?'<div><span class="pill urg" style="margin-left:0">'+esc(m.care.type)+'</span></div>':'')+
       (m.notes?'<div class="muted">'+esc(m.notes)+'</div>':'')+
       '<div class="muted">Last contact: '+(lc?esc(lc.type)+', '+fmtDate(lc.date):'none yet')+'</div>'+
-      '<div style="margin-top:6px"><button class="btn sm" onclick="startVisitFor(\''+m.id+'\')">Log contact</button>'+contactLinks(m)+
+      '<div style="margin-top:6px">'+(isActive(m)?'<button class="btn sm" onclick="startVisitFor(\''+m.id+'\')">Log contact</button>':'')+contactLinks(m)+
       '<button class="btn sm ghost" onclick="openMemberModal(\''+m.id+'\')">Edit</button>'+
       (isAdmin()?'<button class="btn sm red" onclick="deleteMember(\''+m.id+'\')">Remove</button>':'')+'</div></div></div></div>';
   });
-  $('memList').innerHTML=h||'<p class="muted">No names yet. Press Add name to begin.</p>';
+  $('memList').innerHTML=h||'<p class="muted">'+(db.members.length?(memView==='inactive'?'No inactive names.':'No names match.'):'No names yet. Press Add name to begin.')+'</p>';
 }
 $('mSearch').oninput=renderMembers;$('mGroup').onchange=renderMembers;
 function startVisitFor(id){document.querySelector('[data-tab=log]').click();resetVisitForm();$('vMember').value=id}
@@ -757,7 +783,7 @@ function restoreClick(){if(!isAdmin()){say('Administrator only','Only the admini
 
 /* ---------- visits ---------- */
 function fillSelects(){
-  var opts=sortedMembers().map(function(m){return '<option value="'+m.id+'">'+esc(m.name)+'</option>'}).join('');
+  var opts=activeMembers().map(function(m){return '<option value="'+m.id+'">'+esc(m.name)+(isNon(m)?' (non-member)':'')+'</option>'}).join('');
   var cur=$('vMember').value;
   $('vMember').innerHTML=opts||'<option value="">Add a name first</option>';if(cur)$('vMember').value=cur;
   var allT='<option value="">All types</option>'+TYPES.map(function(t){return '<option>'+t+'</option>'}).join('');
@@ -957,7 +983,7 @@ function renderCare(){
 }
 function openCareModal(id){
   var m=id?memById(id):null,c=(m&&m.care)||{type:'Hospitalized',place:'',room:'',since:today(),expect:'',note:''};
-  var sel='<label>Member</label>'+(m?'<div><b>'+esc(m.name)+'</b></div>':'<select id="cMem"><option value="">Choose a member</option>'+sortedMembers().map(function(x){return '<option value="'+x.id+'">'+esc(x.name)+'</option>'}).join('')+'</select>');
+  var sel='<label>Member</label>'+(m?'<div><b>'+esc(m.name)+'</b></div>':'<select id="cMem"><option value="">Choose a member</option>'+activeMembers().map(function(x){return '<option value="'+x.id+'">'+esc(x.name)+'</option>'}).join('')+'</select>');
   modal(m&&m.care?'Update care status':'Add to care list',
    sel+'<label>Status</label><select id="cType">'+['Hospitalized','Homebound','Nursing home','Rehab center'].map(function(t){return '<option'+(t===c.type?' selected':'')+'>'+t+'</option>'}).join('')+'</select>'+
    '<label>Hospital or place</label><input id="cPlace" value="'+esc(c.place)+'">'+
@@ -980,6 +1006,7 @@ function renderOcc(){
   var el=$('occCard');if(!el)return;
   var now=new Date(),mo=now.getMonth()+1,td=now.getDate(),yr=String(now.getFullYear()),list=[];
   db.members.forEach(function(m){
+    if(!isActive(m))return;
     [['bday','Birthday'],['anniv','Anniversary']].forEach(function(k){
       var v=m[k[0]];if(!v)return;var p=v.split('-');
       if(+p[0]===mo)list.push({m:m,kind:k[1],day:+p[1]});
@@ -1454,7 +1481,7 @@ function deletePrayer(id){ask('Remove request','Remove this prayer request?','Re
 function openPrayerModal(id){
   if(!db.members.length){say('Add a name first','Add at least one member on the Members tab.');return}
   var p=id?db.prayers.find(function(x){return x.id===id}):{memberId:'',request:'',status:'Active',added:today()};
-  var opts=sortedMembers().map(function(m){return '<option value="'+m.id+'"'+(m.id===p.memberId?' selected':'')+'>'+esc(m.name)+'</option>'}).join('');
+  var opts=sortedMembers().filter(function(m){return isActive(m)||m.id===p.memberId}).map(function(m){return '<option value="'+m.id+'"'+(m.id===p.memberId?' selected':'')+'>'+esc(m.name)+'</option>'}).join('');
   modal(id?'Edit request':'Add prayer request',
    '<label>Member</label><select id="pMem">'+opts+'</select><label>Prayer request</label><textarea id="pReq">'+esc(p.request)+'</textarea>'+
    '<label>Status</label><select id="pStat"><option'+((p.status||'Active')==='Active'?' selected':'')+'>Active</option><option'+(p.status==='Answered'?' selected':'')+'>Answered</option></select>',
