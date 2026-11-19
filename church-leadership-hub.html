@@ -1,5 +1,6 @@
 <!--
 CHANGELOG
+v1.8.7 - Members: College Student tick with its own list and count.
 v1.8.6 - Members: removed the separate Once a month tick; the Regular attender tick now reads Regular attender (once a month).
 v1.8.5 - Members: Once a month tick beside Regular attender, with its own list and count.
 v1.8.4 - Members: ticks for Out of state, Sick/Shut-in, Minor and Senior, each with its own list, count, name label and Add/Edit checkbox.
@@ -274,7 +275,7 @@ html[data-theme=dark] .item.inactive{background:#1c2142}
   <button class="btn sm ghost" onclick="openBulkModal()">Add several names</button>
   <button class="btn sm ghost" onclick="$('importFile').click()">Import spreadsheet (CSV)</button>
   <input type="file" id="importFile" accept=".csv,text/csv" class="hide">
-  <div class="noprint" style="margin-top:10px"><button class="btn sm" id="mvActive" onclick="setMemView('active')">Active</button><button class="btn sm ghost" id="mvInactive" onclick="setMemView('inactive')">Inactive</button><button class="btn sm ghost" id="mvNon" onclick="setMemView('non')">Non-members</button><button class="btn sm ghost" id="mvReg" onclick="setMemView('reg')">Regular attenders</button><button class="btn sm ghost" id="mvout" onclick="setMemView('out')">Out of state</button><button class="btn sm ghost" id="mvshut" onclick="setMemView('shut')">Sick/Shut-in</button><button class="btn sm ghost" id="mvminor" onclick="setMemView('minor')">Minors</button><button class="btn sm ghost" id="mvsenior" onclick="setMemView('senior')">Seniors</button><button class="btn sm ghost" id="mvAll" onclick="setMemView('all')">All</button></div>
+  <div class="noprint" style="margin-top:10px"><button class="btn sm" id="mvActive" onclick="setMemView('active')">Active</button><button class="btn sm ghost" id="mvInactive" onclick="setMemView('inactive')">Inactive</button><button class="btn sm ghost" id="mvNon" onclick="setMemView('non')">Non-members</button><button class="btn sm ghost" id="mvReg" onclick="setMemView('reg')">Regular attenders</button><button class="btn sm ghost" id="mvout" onclick="setMemView('out')">Out of state</button><button class="btn sm ghost" id="mvshut" onclick="setMemView('shut')">Sick/Shut-in</button><button class="btn sm ghost" id="mvminor" onclick="setMemView('minor')">Minors</button><button class="btn sm ghost" id="mvsenior" onclick="setMemView('senior')">Seniors</button><button class="btn sm ghost" id="mvcollege" onclick="setMemView('college')">College students</button><button class="btn sm ghost" id="mvAll" onclick="setMemView('all')">All</button></div>
   <p class="muted" id="mvHint" style="margin:6px 0 0"></p>
   <input id="mSearch" placeholder="Search names" style="margin-top:10px"><label>Group</label><select id="mGroup"></select>
   <div id="memList" style="margin-top:8px"></div>
@@ -633,7 +634,7 @@ function sortedMembers(){return db.members.slice().sort(function(a,b){return a.n
 function isActive(m){return m.active!==false}
 function isNon(m){return !!m.nonmember}
 function isReg(m){return !!m.regular}
-var FLAGS=[['out','Out of state','Out of state'],['shut','Sick/Shut-in','Sick/Shut-in'],['minor','Minor','Minors'],['senior','Senior','Seniors']];
+var FLAGS=[['out','Out of state','Out of state'],['shut','Sick/Shut-in','Sick/Shut-in'],['minor','Minor','Minors'],['senior','Senior','Seniors'],['college','College Student','College students']];
 function toggleFlag(id,k,on){var m=db.members.find(function(x){return x.id===id});if(!m)return;m[k]=!!on;m.ts=Date.now();logAct((on?'Ticked ':'Unticked ')+k,m.name);persist();renderAll()}
 function toggleReg(id,on){var m=db.members.find(function(x){return x.id===id});if(!m)return;m.regular=!!on;m.ts=Date.now();logAct(on?'Marked regular attender':'Unmarked regular attender',m.name);persist();renderAll()}
 function toggleNon(id,on){var m=db.members.find(function(x){return x.id===id});if(!m)return;m.nonmember=!!on;m.ts=Date.now();logAct(on?'Marked non-member':'Marked member',m.name);persist();renderAll()}
@@ -658,7 +659,7 @@ function openMemberModal(id){
      var n=$('mName').value.trim();
      if(!n){$('mName').style.borderColor='#b3261e';return false}
      if(id){m.name=n;m.phone=$('mPhone').value.trim();m.address=$('mAddr').value.trim();m.joined=$('mJoined').value;m.bday=mdGet('mBd');m.anniv=mdGet('mAn');m.notes=$('mNotes').value.trim();m.groups=getGroups();m.nonmember=$('mNon').checked;m.regular=$('mReg').checked;FLAGS.forEach(function(f){m[f[0]]=$('mF_'+f[0]).checked});m.ts=Date.now()}
-     else{var nm={nonmember:$('mNon').checked,regular:$('mReg').checked,out:$('mF_out').checked,shut:$('mF_shut').checked,minor:$('mF_minor').checked,senior:$('mF_senior').checked,id:uid(),name:n,phone:$('mPhone').value.trim(),address:$('mAddr').value.trim(),joined:$('mJoined').value,bday:mdGet('mBd'),anniv:mdGet('mAn'),notes:$('mNotes').value.trim(),groups:getGroups(),ts:Date.now()};db.members.push(nm);window._newMember=nm.id}
+     else{var nm={nonmember:$('mNon').checked,regular:$('mReg').checked,out:$('mF_out').checked,shut:$('mF_shut').checked,minor:$('mF_minor').checked,senior:$('mF_senior').checked,college:$('mF_college').checked,id:uid(),name:n,phone:$('mPhone').value.trim(),address:$('mAddr').value.trim(),joined:$('mJoined').value,bday:mdGet('mBd'),anniv:mdGet('mAn'),notes:$('mNotes').value.trim(),groups:getGroups(),ts:Date.now()};db.members.push(nm);window._newMember=nm.id}
      logAct(id?'Edited name':'Added name',n);
      var pp=persist();renderAll();
      if(!id){savedNote(pp,n)}
