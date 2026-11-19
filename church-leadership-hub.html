@@ -1,5 +1,6 @@
 <!--
 CHANGELOG
+v1.8.3 - Members: Regular attender tick on every name and in the Add/Edit window; Regular attenders list with count; pill on the name.
 v1.8.2 - Members: Delete button on every name for all signed-in users (administrator passcode asked when PINs are on); warning offers Inactive as the safer choice.
 v1.8.1 - Members: Non-member tick (visitors and friends of the church) with its own list; a short message after adding a name says whether it reached the shared list; names are saved on the device first and sent automatically.
 v1.8.0 - Members: Active tick box on every name; Active, Inactive and All lists with counts. Inactive names are left out of the visit, prayer and care pickers, birthdays and the needs-a-call count, but keep their history and can be made active again.
@@ -270,7 +271,7 @@ html[data-theme=dark] .item.inactive{background:#1c2142}
   <button class="btn sm ghost" onclick="openBulkModal()">Add several names</button>
   <button class="btn sm ghost" onclick="$('importFile').click()">Import spreadsheet (CSV)</button>
   <input type="file" id="importFile" accept=".csv,text/csv" class="hide">
-  <div class="noprint" style="margin-top:10px"><button class="btn sm" id="mvActive" onclick="setMemView('active')">Active</button><button class="btn sm ghost" id="mvInactive" onclick="setMemView('inactive')">Inactive</button><button class="btn sm ghost" id="mvNon" onclick="setMemView('non')">Non-members</button><button class="btn sm ghost" id="mvAll" onclick="setMemView('all')">All</button></div>
+  <div class="noprint" style="margin-top:10px"><button class="btn sm" id="mvActive" onclick="setMemView('active')">Active</button><button class="btn sm ghost" id="mvInactive" onclick="setMemView('inactive')">Inactive</button><button class="btn sm ghost" id="mvNon" onclick="setMemView('non')">Non-members</button><button class="btn sm ghost" id="mvReg" onclick="setMemView('reg')">Regular attenders</button><button class="btn sm ghost" id="mvAll" onclick="setMemView('all')">All</button></div>
   <p class="muted" id="mvHint" style="margin:6px 0 0"></p>
   <input id="mSearch" placeholder="Search names" style="margin-top:10px"><label>Group</label><select id="mGroup"></select>
   <div id="memList" style="margin-top:8px"></div>
@@ -628,6 +629,8 @@ document.querySelectorAll('nav button').forEach(function(b){
 function sortedMembers(){return db.members.slice().sort(function(a,b){return a.name.localeCompare(b.name)})}
 function isActive(m){return m.active!==false}
 function isNon(m){return !!m.nonmember}
+function isReg(m){return !!m.regular}
+function toggleReg(id,on){var m=db.members.find(function(x){return x.id===id});if(!m)return;m.regular=!!on;m.ts=Date.now();logAct(on?'Marked regular attender':'Unmarked regular attender',m.name);persist();renderAll()}
 function toggleNon(id,on){var m=db.members.find(function(x){return x.id===id});if(!m)return;m.nonmember=!!on;m.ts=Date.now();logAct(on?'Marked non-member':'Marked member',m.name);persist();renderAll()}
 var toastT=null;
 function toast(msg){var t=$('toastBox');if(!t){t=document.createElement('div');t.id='toastBox';t.setAttribute('role','status');document.body.appendChild(t)}t.textContent=msg;t.className='show';clearTimeout(toastT);toastT=setTimeout(function(){t.className=''},6000)}
@@ -645,12 +648,12 @@ function openMemberModal(id){
    '<div class="muted">Anyone who joined in the last 12 months is placed in Less than one year automatically.</div>'+
    '<label>Birthday</label>'+mdPicker('mBd',m.bday)+'<label>Wedding anniversary</label>'+mdPicker('mAn',m.anniv)+
    '<label>Notes (caregiver, special needs, etc.)</label><textarea id="mNotes">'+esc(m.notes)+'</textarea>'+
-   '<label><input type="checkbox" id="mNon"'+(m.nonmember?' checked':'')+'> Non-member (visitor or friend of the church)</label>'+'<label>Groups</label><div class="chips">'+GROUPS.map(function(g){return '<label><input type="checkbox" class="mg" value="'+g+'"'+((m.groups||[]).indexOf(g)>-1?' checked':'')+'>'+g+'</label>'}).join('')+'</div>',
+   '<label><input type="checkbox" id="mNon"'+(m.nonmember?' checked':'')+'> Non-member (visitor or friend of the church)</label><label><input type="checkbox" id="mReg"'+(m.regular?' checked':'')+'> Regular attender</label>'+'<label>Groups</label><div class="chips">'+GROUPS.map(function(g){return '<label><input type="checkbox" class="mg" value="'+g+'"'+((m.groups||[]).indexOf(g)>-1?' checked':'')+'>'+g+'</label>'}).join('')+'</div>',
    [{text:'Cancel',cls:'ghost'},{text:'Save',fn:function(){
      var n=$('mName').value.trim();
      if(!n){$('mName').style.borderColor='#b3261e';return false}
-     if(id){m.name=n;m.phone=$('mPhone').value.trim();m.address=$('mAddr').value.trim();m.joined=$('mJoined').value;m.bday=mdGet('mBd');m.anniv=mdGet('mAn');m.notes=$('mNotes').value.trim();m.groups=getGroups();m.nonmember=$('mNon').checked;m.ts=Date.now()}
-     else{var nm={nonmember:$('mNon').checked,id:uid(),name:n,phone:$('mPhone').value.trim(),address:$('mAddr').value.trim(),joined:$('mJoined').value,bday:mdGet('mBd'),anniv:mdGet('mAn'),notes:$('mNotes').value.trim(),groups:getGroups(),ts:Date.now()};db.members.push(nm);window._newMember=nm.id}
+     if(id){m.name=n;m.phone=$('mPhone').value.trim();m.address=$('mAddr').value.trim();m.joined=$('mJoined').value;m.bday=mdGet('mBd');m.anniv=mdGet('mAn');m.notes=$('mNotes').value.trim();m.groups=getGroups();m.nonmember=$('mNon').checked;m.regular=$('mReg').checked;m.ts=Date.now()}
+     else{var nm={nonmember:$('mNon').checked,regular:$('mReg').checked,id:uid(),name:n,phone:$('mPhone').value.trim(),address:$('mAddr').value.trim(),joined:$('mJoined').value,bday:mdGet('mBd'),anniv:mdGet('mAn'),notes:$('mNotes').value.trim(),groups:getGroups(),ts:Date.now()};db.members.push(nm);window._newMember=nm.id}
      logAct(id?'Edited name':'Added name',n);
      var pp=persist();renderAll();
      if(!id){savedNote(pp,n)}
@@ -709,13 +712,13 @@ function lastContact(id){
 function renderMembers(){
   var q=$('mSearch').value.toLowerCase(),g=$('mGroup').value,h='';
   var nn=db.members.filter(isNon).length,na=db.members.filter(function(m){return isActive(m)&&!isNon(m)}).length,ni=db.members.filter(function(m){return !isActive(m)&&!isNon(m)}).length;
-  $('mvActive').textContent='Active ('+na+')';$('mvInactive').textContent='Inactive ('+ni+')';$('mvNon').textContent='Non-members ('+nn+')';$('mvAll').textContent='All ('+db.members.length+')';
-  $('mvActive').className='btn sm'+(memView==='active'?'':' ghost');$('mvInactive').className='btn sm'+(memView==='inactive'?'':' ghost');$('mvNon').className='btn sm'+(memView==='non'?'':' ghost');$('mvAll').className='btn sm'+(memView==='all'?'':' ghost');
-  $('mvHint').textContent=memView==='inactive'?'These names are hidden from the visit, prayer and birthday lists. Tick Active to bring one back.':(memView==='non'?'Visitors and friends of the church. They can still be visited and logged. Untick Non-member when someone joins.':'Untick Active to move a name to the Inactive list. Tick Non-member for a visitor or friend of the church. Visit history is kept.');
-  sortedMembers().filter(function(m){return m.name.toLowerCase().indexOf(q)>-1&&(!g||hasGroup(m,g))&&(memView==='all'||(memView==='non'?isNon(m):(!isNon(m)&&(memView==='active'?isActive(m):!isActive(m)))))}).forEach(function(m){
+  $('mvActive').textContent='Active ('+na+')';$('mvInactive').textContent='Inactive ('+ni+')';$('mvNon').textContent='Non-members ('+nn+')';$('mvReg').textContent='Regular attenders ('+db.members.filter(isReg).length+')';$('mvAll').textContent='All ('+db.members.length+')';
+  $('mvActive').className='btn sm'+(memView==='active'?'':' ghost');$('mvInactive').className='btn sm'+(memView==='inactive'?'':' ghost');$('mvNon').className='btn sm'+(memView==='non'?'':' ghost');$('mvReg').className='btn sm'+(memView==='reg'?'':' ghost');$('mvAll').className='btn sm'+(memView==='all'?'':' ghost');
+  $('mvHint').textContent=memView==='inactive'?'These names are hidden from the visit, prayer and birthday lists. Tick Active to bring one back.':(memView==='reg'?'Names ticked as regular attenders, whether or not they are members.':memView==='non'?'Visitors and friends of the church. They can still be visited and logged. Untick Non-member when someone joins.':'Untick Active to move a name to the Inactive list. Tick Non-member for a visitor or friend of the church. Visit history is kept.');
+  sortedMembers().filter(function(m){return m.name.toLowerCase().indexOf(q)>-1&&(!g||hasGroup(m,g))&&(memView==='all'||(memView==='reg'?isReg(m):memView==='non'?isNon(m):(!isNon(m)&&(memView==='active'?isActive(m):!isActive(m)))))}).forEach(function(m){
     var lc=lastContact(m.id);
     var dd=lc?daysSince(lc.date):null,pc=dd===null?'late':(dd<=30?'good':(dd<=60?'mid':'late')),pt=dd===null?'Not yet contacted':(dd<=0?'Contacted today':'Contacted '+dd+' day'+(dd===1?'':'s')+' ago');
-    h+='<div class="item'+(isActive(m)?'':' inactive')+'"><div class="mem"><div class="av">'+esc(initials(m.name))+'</div><div class="body"><div class="actbox"><label class="actchk"><input type="checkbox"'+(isActive(m)?' checked':'')+' onchange="toggleActive(\''+m.id+'\',this.checked)"> Active</label><label class="actchk"><input type="checkbox"'+(isNon(m)?' checked':'')+' onchange="toggleNon(\''+m.id+'\',this.checked)"> Non-member</label></div><b>'+esc(m.name)+'</b>'+(isActive(m)?'':' <span class="pill late">Inactive</span>')+(isNon(m)?' <span class="pill mid">Non-member</span>':'')+'<span class="pill '+pc+'">'+pt+'</span>'+
+    h+='<div class="item'+(isActive(m)?'':' inactive')+'"><div class="mem"><div class="av">'+esc(initials(m.name))+'</div><div class="body"><div class="actbox"><label class="actchk"><input type="checkbox"'+(isActive(m)?' checked':'')+' onchange="toggleActive(\''+m.id+'\',this.checked)"> Active</label><label class="actchk"><input type="checkbox"'+(isNon(m)?' checked':'')+' onchange="toggleNon(\''+m.id+'\',this.checked)"> Non-member</label><label class="actchk"><input type="checkbox"'+(isReg(m)?' checked':'')+' onchange="toggleReg(\''+m.id+'\',this.checked)"> Regular attender</label></div><b>'+esc(m.name)+'</b>'+(isActive(m)?'':' <span class="pill late">Inactive</span>')+(isNon(m)?' <span class="pill mid">Non-member</span>':'')+(isReg(m)?' <span class="pill mid">Regular</span>':'')+'<span class="pill '+pc+'">'+pt+'</span>'+
       (effGroups(m).length?'<div>'+effGroups(m).map(function(x){return '<span class="gtag">'+esc(x)+'</span>'}).join('')+'</div>':'')+
       '<div class="muted">'+(m.phone?esc(m.phone)+'  ':'')+(m.address?esc(m.address):'')+'</div>'+
       (m.joined?'<div class="muted">Joined '+fmtDate(m.joined)+'</div>':'')+
