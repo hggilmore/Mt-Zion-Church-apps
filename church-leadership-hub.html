@@ -1,5 +1,6 @@
 <!--
 CHANGELOG
+v1.8.2 - Members: Delete button on every name for all signed-in users (administrator passcode asked when PINs are on); warning offers Inactive as the safer choice.
 v1.8.1 - Members: Non-member tick (visitors and friends of the church) with its own list; a short message after adding a name says whether it reached the shared list; names are saved on the device first and sent automatically.
 v1.8.0 - Members: Active tick box on every name; Active, Inactive and All lists with counts. Inactive names are left out of the visit, prayer and care pickers, birthdays and the needs-a-call count, but keep their history and can be made active again.
 v1.7.4 - Reports: new Text Message button opens the Messages app with the report text in a new message; remembers the phone number.
@@ -672,9 +673,9 @@ function openBulkModal(){
    }}]);
 }
 function deleteMember(id){
-  if(!isAdmin()){say('Administrator only','Only the administrator can remove a name, because it also removes that person\'s records.');return}
+  if(lockOn()&&!isAdmin()){say('Administrator only','Because PIN logins are on, only the administrator can delete a name. Unlock with the administrator passcode in Settings, or tick the name Inactive instead.');return}
   var count=db.visits.filter(function(v){return v.memberId===id}).length;
-  ask('Remove name',count?('This name has '+count+' logged contacts. Removing the name also removes those records. Continue?'):'Remove this name?','Remove',function(){
+  ask('Delete name',(count?('This name has '+count+' logged contacts. Deleting the name also deletes those records. '):'')+'This cannot be undone. To keep the history, tick Inactive instead. Delete this name?','Delete',function(){
     logAct('Removed name',memName(id));
     db.visits.forEach(function(v){if(v.memberId===id)db.deleted.push(v.id)});
     db.prayers.forEach(function(p){if(p.memberId===id)db.deleted.push(p.id)});
@@ -724,7 +725,7 @@ function renderMembers(){
       '<div class="muted">Last contact: '+(lc?esc(lc.type)+', '+fmtDate(lc.date):'none yet')+'</div>'+
       '<div style="margin-top:6px">'+(isActive(m)?'<button class="btn sm" onclick="startVisitFor(\''+m.id+'\')">Log contact</button>':'')+contactLinks(m)+
       '<button class="btn sm ghost" onclick="openMemberModal(\''+m.id+'\')">Edit</button>'+
-      (isAdmin()?'<button class="btn sm red" onclick="deleteMember(\''+m.id+'\')">Remove</button>':'')+'</div></div></div></div>';
+      '<button class="btn sm red" onclick="deleteMember(\''+m.id+'\')">Delete</button></div></div></div></div>';
   });
   $('memList').innerHTML=h||'<p class="muted">'+(db.members.length?(memView==='inactive'?'No inactive names.':'No names match.'):'No names yet. Press Add name to begin.')+'</p>';
 }
