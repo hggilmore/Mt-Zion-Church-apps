@@ -1,5 +1,6 @@
 <!--
 CHANGELOG
+v2.1.1 - Backup reminder banner now shows only on a device signed in as administrator.
 v2.1.0 - Birthdays and anniversaries show the next 7 days with a This month button; Due for a visit list (60, 90 or 120 days; Seniors, Shut-ins and Sick first); Yearly Report for the church conference; backup reminder banner for the administrator after 30 days.
 v2.0.1 - Log Visit: Type, Reason and Member start blank (Choose a ...); Member and Type are required to save.
 v2.0.0 - Polish pass: Log Visit glance tiles moved below the form and Follow up and Urgent are now ticks; History date range and Show more; Reports quick dates, More filters and one Send or Save button; Settings sections fold open and closed, icon number card removed; Ministries More button; Remove renamed Delete everywhere.
@@ -1081,7 +1082,7 @@ function renderBackupBanner(){
   var el=$('bkCard');if(!el)return;
   var show=false,txt='';
   try{
-    if((isAdmin()||!lockOn())&&db.members.length>5){
+    if(isAdmin()&&db.members.length>5){
       var last=localStorage.getItem(BKKEY),sn=Number(localStorage.getItem(BKSNZ)||0);
       var days=last?Math.round((Date.now()-Number(last))/86400000):null;
       if((days===null||days>=30)&&Date.now()>sn){show=true;txt=days===null?'You have not downloaded a backup file on this device.':'It has been '+days+' days since you downloaded a backup file.'}
