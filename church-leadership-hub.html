@@ -1,5 +1,6 @@
 <!--
 CHANGELOG
+v2.0.1 - Log Visit: Type, Reason and Member start blank (Choose a ...); Member and Type are required to save.
 v2.0.0 - Polish pass: Log Visit glance tiles moved below the form and Follow up and Urgent are now ticks; History date range and Show more; Reports quick dates, More filters and one Send or Save button; Settings sections fold open and closed, icon number card removed; Ministries More button; Remove renamed Delete everywhere.
 v1.9.2 - Groups: Out of state renamed Moved Away; existing names are converted automatically.
 v1.9.1 - Members screen: ticks moved into one tidy row under each name; duplicate Regular label removed from the name line.
@@ -232,7 +233,7 @@ html[data-theme=dark] .item.inactive{background:#1c2142}
   <input type="hidden" id="visitId">
   <label>Type</label>
   <select id="vType">
-   <option>Phone Call</option><option>Home Visit</option><option>Hospital Visit</option><option>Card Sent</option><option>Other Visit</option>
+   <option value="">Choose a type</option><option>Phone Call</option><option>Home Visit</option><option>Hospital Visit</option><option>Card Sent</option><option>Other Visit</option>
   </select>
   <label>Reason</label>
   <select id="vReason"></select>
@@ -789,7 +790,7 @@ function restoreClick(){if(!isAdmin()){say('Administrator only','Only the admini
 function fillSelects(){
   var opts=activeMembers().map(function(m){return '<option value="'+m.id+'">'+esc(m.name)+(isNon(m)?' (non-member)':'')+'</option>'}).join('');
   var cur=$('vMember').value;
-  $('vMember').innerHTML=opts||'<option value="">Add a name first</option>';if(cur)$('vMember').value=cur;
+  $('vMember').innerHTML=opts?'<option value="">Choose a member</option>'+opts:'<option value="">Add a name first</option>';if(cur)$('vMember').value=cur;
   var allT='<option value="">All types</option>'+TYPES.map(function(t){return '<option>'+t+'</option>'}).join('');
   var hm='<option value="">All members</option>'+opts;
   var ch=$('hType').value,cm=$('hMember').value;
@@ -803,8 +804,8 @@ function fillSelects(){
 function deacons(){var s={};db.visits.forEach(function(v){if(v.deacon)s[v.deacon]=1});return Object.keys(s).sort()}
 function resetVisitForm(){
   $('visitId').value='';$('logTitle').textContent='Log a Visit or Call';
-  $('vType').value='Phone Call';$('vDate').value=today();$('vTime').value=nowTime();
-  $('vLoc').value='';$('vNotes').value='';$('vReason').value=REASONS[0];$('vFollow').checked=false;$('vFollowDate').value='';$('vUrgent').checked=false;
+  $('vType').value='';$('vMember').value='';$('vDate').value=today();$('vTime').value=nowTime();
+  $('vLoc').value='';$('vNotes').value='';$('vReason').value='';$('vFollow').checked=false;$('vFollowDate').value='';$('vUrgent').checked=false;
   $('followDateWrap').classList.add('hide');
   try{$('vDeacon').value=me||localStorage.getItem('deaconVisits_last')||''}catch(e){}
   updateLoc();
@@ -819,6 +820,7 @@ $('vFollow').onchange=function(){var y=$('vFollow').checked;$('followDateWrap').
 function saveVisit(){
   if(!me){askMyName(saveVisit);return}
   if(!$('vMember').value){say('Name needed','Choose a member, or press Add a new name.');return}
+  if(!$('vType').value){say('Type needed','Choose the type of contact, such as Phone Call or Home Visit.');return}
   if(!$('vDate').value){say('Date needed','Please enter the date.');return}
   var id=$('visitId').value;
   var rec={id:id||uid(),type:$('vType').value,memberId:$('vMember').value,date:$('vDate').value,time:$('vTime').value,
@@ -836,7 +838,7 @@ function editVisit(id){
   document.querySelector('[data-tab=log]').click();
   $('visitId').value=v.id;$('logTitle').textContent='Edit Record';
   $('vType').value=v.type;$('vMember').value=v.memberId;$('vDate').value=v.date;$('vTime').value=v.time;
-  $('vDeacon').value=v.deacon;$('vReason').value=v.reason||REASONS[0];$('vLoc').value=v.location||'';$('vNotes').value=v.notes||'';
+  $('vDeacon').value=v.deacon;$('vReason').value=v.reason||'';$('vLoc').value=v.location||'';$('vNotes').value=v.notes||'';
   $('vUrgent').checked=!!v.urgent;$('vFollow').checked=!!v.follow;$('vFollowDate').value=v.followDate||'';
   $('followDateWrap').classList.toggle('hide',!v.follow);updateLoc();window.scrollTo(0,0);
 }
@@ -1472,7 +1474,7 @@ function fillExtra(){
   var g='<option value="">All groups</option>'+GROUPS.map(opt).join('');
   put('mGroup',g);put('rGroup',g);
   put('rReason','<option value="">All reasons</option>'+REASONS.map(opt).join(''));
-  put('vReason',REASONS.map(opt).join(''));
+  put('vReason','<option value="">Choose a reason</option>'+REASONS.map(opt).join(''));
 }
 function monthlyReport(){
   var m=$('rMonth').value;
