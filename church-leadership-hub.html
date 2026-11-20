@@ -1,5 +1,6 @@
 <!--
 CHANGELOG
+v2.1.0 - Birthdays and anniversaries show the next 7 days with a This month button; Due for a visit list (60, 90 or 120 days; Seniors, Shut-ins and Sick first); Yearly Report for the church conference; backup reminder banner for the administrator after 30 days.
 v2.0.1 - Log Visit: Type, Reason and Member start blank (Choose a ...); Member and Type are required to save.
 v2.0.0 - Polish pass: Log Visit glance tiles moved below the form and Follow up and Urgent are now ticks; History date range and Show more; Reports quick dates, More filters and one Send or Save button; Settings sections fold open and closed, icon number card removed; Ministries More button; Remove renamed Delete everywhere.
 v1.9.2 - Groups: Out of state renamed Moved Away; existing names are converted automatically.
@@ -227,6 +228,7 @@ html[data-theme=dark] .item.inactive{background:#1c2142}
 <main>
 
 <section id="tab-log">
+ <div class="card hide" id="bkCard"></div>
  <div class="card hide" id="urgentCard"></div>
  <div class="card">
   <h2 id="logTitle">Log a Visit or Call</h2>
@@ -259,6 +261,7 @@ html[data-theme=dark] .item.inactive{background:#1c2142}
  <div class="card today" id="todayCard"></div>
  <div class="card" id="careCard"></div>
  <div class="card hide" id="occCard"></div>
+ <div class="card hide" id="dueCard"></div>
  <div class="card">
   <h2>Follow ups waiting</h2>
   <div id="followList"></div>
@@ -307,6 +310,8 @@ html[data-theme=dark] .item.inactive{background:#1c2142}
   <hr style="border:0;border-top:1px solid var(--line);margin-top:16px">
   <label>Monthly Deacon Report (one page for the board, with active prayer list)</label>
   <div class="row"><input type="month" id="rMonth"><div><button class="btn alt" style="margin-top:0" onclick="monthlyReport()">Build Monthly Report</button></div></div>
+  <label style="margin-top:14px">Yearly Report (for the church conference)</label>
+  <div class="row"><input type="number" id="rYear" min="2000" max="2100" step="1"><div><button class="btn alt" style="margin-top:0" onclick="yearlyReport()">Build Yearly Report</button></div></div>
  </div>
  <div class="card" id="reportOut"><p class="muted">Choose your dates and press Run Report.</p></div>
 </section>
@@ -598,6 +603,7 @@ function downloadBackup(){
   var a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(db,null,2)],{type:'application/json'}));
   a.download='deacon-visits-backup-'+today()+'.json';a.click();
+  try{localStorage.setItem('deaconVisits_lastdl',String(Date.now()))}catch(e){}renderBackupBanner();
 }
 $('restoreFile').addEventListener('change',function(e){
   if(!isAdmin()){e.target.value='';say('Administrator only','Only the administrator can restore a backup.');return}
@@ -1019,22 +1025,29 @@ function clearCare(id){
   ask('Mark home','Remove '+m.name+' from the hospital and homebound list?','Mark home',function(){m.care=null;m.ts=Date.now();logAct('Care list',m.name+' marked home');persist();renderAll()});
 }
 function cardSent(id,kind,yr){return db.visits.some(function(v){return v.type==='Card Sent'&&v.memberId===id&&String(v.date).slice(0,4)===yr&&(v.notes||'').indexOf(kind+' card')===0})}
+var occView='week';
+function setOcc(v){occView=v;renderOcc()}
 function renderOcc(){
   var el=$('occCard');if(!el)return;
-  var now=new Date(),mo=now.getMonth()+1,td=now.getDate(),yr=String(now.getFullYear()),list=[];
+  var now=new Date(),mo=now.getMonth()+1,td=now.getDate(),yr=String(now.getFullYear()),list=[],t0=new Date(now.getFullYear(),now.getMonth(),td);
   db.members.forEach(function(m){
     if(!isActive(m))return;
     [['bday','Birthday'],['anniv','Anniversary']].forEach(function(k){
-      var v=m[k[0]];if(!v)return;var p=v.split('-');
-      if(+p[0]===mo)list.push({m:m,kind:k[1],day:+p[1]});
+      var v=m[k[0]];if(!v)return;var p=v.split('-'),pm=+p[0],pd=+p[1];
+      if(occView==='month'){if(pm===mo)list.push({m:m,kind:k[1],day:pd,sort:pd,tag:pd===td?' (today)':(pd<td?' (passed)':'')});return}
+      var d=new Date(now.getFullYear(),pm-1,pd);if(d<t0)d=new Date(now.getFullYear()+1,pm-1,pd);
+      var diff=Math.round((d-t0)/86400000);
+      if(diff<=7)list.push({m:m,kind:k[1],day:pd,sort:diff,tag:diff===0?' (today)':(diff===1?' (tomorrow)':' (in '+diff+' days)')});
     });
   });
+  var tog='<div class="noprint" style="margin-bottom:8px"><button class="btn sm'+(occView==='week'?'':' ghost')+'" onclick="setOcc(\'week\')">Next 7 days</button><button class="btn sm'+(occView==='month'?'':' ghost')+'" onclick="setOcc(\'month\')">This month</button></div>';
+  if(!list.length&&occView==='week'){el.classList.remove('hide');el.innerHTML='<h2>Birthdays and anniversaries</h2>'+tog+'<p class="muted">None in the next 7 days.</p>';return}
   if(!list.length){el.classList.add('hide');el.innerHTML='';return}
-  list.sort(function(a,b){return a.day-b.day||a.m.name.localeCompare(b.m.name)});
+  list.sort(function(a,b){return a.sort-b.sort||a.m.name.localeCompare(b.m.name)});
   el.classList.remove('hide');
-  el.innerHTML='<h2>Birthdays and anniversaries in '+esc(now.toLocaleDateString(undefined,{month:'long'}))+'</h2>'+list.map(function(x){
-    var sent=cardSent(x.m.id,x.kind,yr),tag=x.day===td?' (today)':(x.day<td?' (passed)':'');
-    return '<div class="item"><b>'+esc(x.m.name)+'</b><span class="pill mid">'+x.kind+'</span><div class="muted">'+fmtMD(x.m.bday&&x.kind==='Birthday'?x.m.bday:x.m.anniv)+tag+'</div>'+
+  el.innerHTML='<h2>Birthdays and anniversaries'+(occView==='month'?' in '+esc(now.toLocaleDateString(undefined,{month:'long'})):'')+'</h2>'+tog+list.map(function(x){
+    var sent=cardSent(x.m.id,x.kind,yr);
+    return '<div class="item"><b>'+esc(x.m.name)+'</b><span class="pill mid">'+x.kind+'</span><div class="muted">'+fmtMD(x.kind==='Birthday'?x.m.bday:x.m.anniv)+x.tag+'</div>'+
      '<div style="margin-top:6px">'+(sent?'<span class="pill good" style="margin-left:0">Card sent</span>':'<button class="btn sm" onclick="sendOccCard(\''+x.m.id+'\',\''+x.kind+'\')">Card sent</button>')+contactLinks(x.m)+'</div></div>';
   }).join('');
 }
@@ -1043,6 +1056,68 @@ function sendOccCard(id,kind){
   db.visits.push({id:uid(),type:'Card Sent',memberId:id,date:today(),time:nowTime(),deacon:me,reason:'Encouragement',ts:Date.now(),enteredBy:me,location:'',notes:kind+' card',follow:false,followDate:'',urgent:false,done:false});
   logAct('Card sent',kind+' card, '+memName(id));
   persist();renderAll();
+}
+var dueLimit=10,dueDays=60;
+try{dueDays=Number(localStorage.getItem('deaconVisits_due'))||60}catch(e){}
+function setDue(n){dueDays=Number(n);dueLimit=10;try{localStorage.setItem('deaconVisits_due',String(dueDays))}catch(e){}renderDue()}
+function renderDue(){
+  var el=$('dueCard');if(!el)return;
+  var pri=['Senior','Shut-in','Sick'],l=[];
+  db.members.forEach(function(m){
+    if(!isActive(m)||isNon(m))return;
+    var lc=lastContact(m.id),d=lc?daysSince(lc.date):9999;
+    if(d>=dueDays)l.push({m:m,d:d,p:(m.groups||[]).some(function(g){return pri.indexOf(g)>-1})?0:1});
+  });
+  l.sort(function(a,b){return a.p-b.p||b.d-a.d||a.m.name.localeCompare(b.m.name)});
+  el.classList.remove('hide');
+  var sel='<select onchange="setDue(this.value)" style="width:auto;display:inline-block">'+[60,90,120].map(function(n){return '<option value="'+n+'"'+(n===dueDays?' selected':'')+'>'+n+' days</option>'}).join('')+'</select>';
+  var shown=l.slice(0,dueLimit);
+  el.innerHTML='<h2>Due for a visit ('+l.length+')</h2><p class="muted">Active members with no contact in '+sel+'. Seniors, Shut-ins and Sick are listed first.</p>'+
+   (shown.map(function(x){return '<div class="item"><b>'+esc(x.m.name)+'</b> <span class="pill late">'+(x.d===9999?'Never contacted':x.d+' days')+'</span>'+((x.m.groups||[]).length?'<div>'+x.m.groups.map(function(g){return '<span class="gtag">'+esc(g)+'</span>'}).join('')+'</div>':'')+'<div style="margin-top:6px"><button class="btn sm" onclick="startVisitFor(\''+x.m.id+'\')">Log contact</button>'+contactLinks(x.m)+'</div></div>'}).join('')||'<p class="muted">Everyone has been contacted recently.</p>')+
+   (l.length>dueLimit?'<button class="btn ghost" onclick="dueLimit+=10;renderDue()">Show more</button>':'');
+}
+var BKKEY='deaconVisits_lastdl',BKSNZ='deaconVisits_bksnooze';
+function renderBackupBanner(){
+  var el=$('bkCard');if(!el)return;
+  var show=false,txt='';
+  try{
+    if((isAdmin()||!lockOn())&&db.members.length>5){
+      var last=localStorage.getItem(BKKEY),sn=Number(localStorage.getItem(BKSNZ)||0);
+      var days=last?Math.round((Date.now()-Number(last))/86400000):null;
+      if((days===null||days>=30)&&Date.now()>sn){show=true;txt=days===null?'You have not downloaded a backup file on this device.':'It has been '+days+' days since you downloaded a backup file.'}
+    }
+  }catch(e){}
+  if(!show){el.classList.add('hide');el.innerHTML='';return}
+  el.classList.remove('hide');
+  el.innerHTML='<h2>Backup reminder</h2><p class="muted">'+txt+' A backup keeps the member list and records safe if a phone is lost.</p><button class="btn" onclick="downloadBackup()">Download Backup</button><button class="btn ghost" onclick="snoozeBackup()">Remind me in 7 days</button>';
+}
+function snoozeBackup(){try{localStorage.setItem(BKSNZ,String(Date.now()+7*86400000))}catch(e){}renderBackupBanner()}
+function yearlyReport(){
+  var y=$('rYear').value;if(!/^\d{4}$/.test(y)){say('Year needed','Enter a four digit year, such as 2026.');return}
+  var vs=db.visits.filter(function(v){return v.date&&v.date.slice(0,4)===y});
+  lastReport=vs.slice().sort(function(a,b){return (a.date+(a.time||'')).localeCompare(b.date+(b.time||''))});
+  var reached={},byType={},byMo=[0,0,0,0,0,0,0,0,0,0,0,0],byDea={};
+  vs.forEach(function(v){reached[v.memberId]=1;byType[v.type]=(byType[v.type]||0)+1;var mo=+v.date.slice(5,7)-1;if(mo>=0&&mo<12)byMo[mo]++;if(v.deacon)byDea[v.deacon]=(byDea[v.deacon]||0)+1});
+  var act=db.members.filter(function(m){return isActive(m)&&!isNon(m)}),actIds={};act.forEach(function(m){actIds[m.id]=1});
+  var reachedAct=Object.keys(reached).filter(function(k){return actIds[k]}).length,notReached=act.length-reachedAct;
+  var pr=db.prayers.filter(function(p){return (p.added||'').slice(0,4)===y}),ans=pr.filter(function(p){return p.status==='Answered'}).length;
+  var urg=vs.filter(function(v){return v.urgent}).length,fol=vs.filter(function(v){return v.follow}).length,fdone=vs.filter(function(v){return v.follow&&v.done}).length;
+  var MN=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  function rows(o){return Object.keys(o).sort(function(a,b){return o[b]-o[a]}).map(function(k){return '<tr><td>'+esc(k)+'</td><td style="text-align:right">'+o[k]+'</td></tr>'}).join('')||'<tr><td colspan="2" class="muted">None</td></tr>'}
+  var h='<div class="printonly"></div><h2>Mt. Zion Baptist Church Deacon Ministry Report, '+y+'</h2>'+
+   '<p class="muted">Prepared '+fmtDate(today())+'</p>'+
+   '<table class="yr" style="width:100%"><tr><td>Total contacts</td><td style="text-align:right"><b>'+vs.length+'</b></td></tr>'+
+   '<tr><td>Active members reached at least once</td><td style="text-align:right"><b>'+reachedAct+' of '+act.length+'</b></td></tr>'+
+   '<tr><td>Active members not reached this year</td><td style="text-align:right"><b>'+notReached+'</b></td></tr>'+
+   '<tr><td>Hospital visits</td><td style="text-align:right"><b>'+(byType['Hospital Visit']||0)+'</b></td></tr>'+
+   '<tr><td>Cards sent</td><td style="text-align:right"><b>'+(byType['Card Sent']||0)+'</b></td></tr>'+
+   '<tr><td>Urgent needs recorded</td><td style="text-align:right"><b>'+urg+'</b></td></tr>'+
+   '<tr><td>Follow ups marked done</td><td style="text-align:right"><b>'+fdone+' of '+fol+'</b></td></tr>'+
+   '<tr><td>Prayer requests added</td><td style="text-align:right"><b>'+pr.length+' ('+ans+' answered)</b></td></tr></table>'+
+   '<h3>Contacts by type</h3><table style="width:100%">'+rows(byType)+'</table>'+
+   '<h3>Contacts by month</h3><table style="width:100%">'+byMo.map(function(n,i){return '<tr><td>'+MN[i]+'</td><td style="text-align:right">'+n+'</td></tr>'}).join('')+'</table>'+
+   '<h3>Contacts by deacon</h3><table style="width:100%">'+rows(byDea)+'</table>';
+  $('reportOut').innerHTML=h;$('reportOut').scrollIntoView({behavior:'smooth'});
 }
 function updateBadge(){
   var t=today(),n=db.visits.filter(function(v){return !v.done&&(v.urgent||(v.follow&&v.followDate&&v.followDate<=t))}).length;
@@ -1575,7 +1650,7 @@ $('importFile').addEventListener('change',function(e){
   rd.readAsText(f);e.target.value='';
 });
 
-function renderAll(){renderToday();renderUrgent();renderCare();renderOcc();updateBadge();fillSelects();fillExtra();renderFollow();renderHistory();renderMembers();renderPrayer();renderAdmin();renderMinistries();renderNotes();renderLinks();checkLock()}
+function renderAll(){renderToday();renderUrgent();renderCare();renderOcc();renderDue();renderBackupBanner();updateBadge();fillSelects();fillExtra();renderFollow();renderHistory();renderMembers();renderPrayer();renderAdmin();renderMinistries();renderNotes();renderLinks();checkLock()}
 function b64u(t){return btoa(unescape(encodeURIComponent(t))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 function unb64u(t){t=t.replace(/-/g,'+').replace(/_/g,'/');while(t.length%4)t+='=';return decodeURIComponent(escape(atob(t)))}
 function makeSetupLink(){
@@ -1605,7 +1680,7 @@ applyUI();
 loadLocal();
 $('sKey').value=cfg.key||'';$('sBin').value=cfg.bin||'';
 var d0=new Date();d0.setDate(1);
-$('rFrom').value=d0.getFullYear()+'-'+String(d0.getMonth()+1).padStart(2,'0')+'-01';$('rTo').value=today();
+$('rYear').value=d0.getFullYear();$('rFrom').value=d0.getFullYear()+'-'+String(d0.getMonth()+1).padStart(2,'0')+'-01';$('rTo').value=today();
 try{me=localStorage.getItem(LSME)||''}catch(e){}
 $('sMe').value=me;
 renderAll();resetVisitForm();
