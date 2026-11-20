@@ -1,5 +1,9 @@
 <!--
 CHANGELOG
+v2.0.0 - Polish pass: Log Visit glance tiles moved below the form and Follow up and Urgent are now ticks; History date range and Show more; Reports quick dates, More filters and one Send or Save button; Settings sections fold open and closed, icon number card removed; Ministries More button; Remove renamed Delete everywhere.
+v1.9.2 - Groups: Out of state renamed Moved Away; existing names are converted automatically.
+v1.9.1 - Members screen: ticks moved into one tidy row under each name; duplicate Regular label removed from the name line.
+v1.9.0 - Members cleanup: Senior, Sick/Shut-in, Minor, College Student and Out of state moved into Groups (no duplicate ticks); older ticks are converted to groups automatically; only Active, Non-member and Regular attender stay as ticks; list buttons reduced.
 v1.8.7 - Members: College Student tick with its own list and count.
 v1.8.6 - Members: removed the separate Once a month tick; the Regular attender tick now reads Regular attender (once a month).
 v1.8.5 - Members: Once a month tick beside Regular attender, with its own list and count.
@@ -194,10 +198,17 @@ html[data-theme=dark] .noteMonth>summary{background:#252c55;color:#e9bff5}
 .actchk input{width:22px;height:22px;margin:0}
 .item.inactive{opacity:.8;background:#f2f2f2}
 html[data-theme=dark] .item.inactive{background:#1c2142}
-.actbox{float:right;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
-.actbox .actchk{float:none;margin:0}
 #toastBox{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:#410942;color:#fff;padding:12px 16px;border-radius:12px;z-index:9999;max-width:90%;font-size:15px;box-shadow:0 4px 14px rgba(0,0,0,.35);display:none}
 #toastBox.show{display:block}
+.actbox{display:flex;flex-wrap:wrap;gap:6px 14px;margin:8px 0 2px}
+.actbox .actchk{float:none;margin:0;display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:14px}
+.tickline{display:flex;align-items:center;gap:10px;margin-top:12px;font-weight:600}
+.tickline input{width:24px;height:24px;margin:0}
+.morelink{cursor:pointer;color:#0086FF;font-weight:700;padding:6px 0}
+#tab-settings .card>h2{cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+#tab-settings .card>h2::after{content:"+";font-size:22px;color:#410942}
+#tab-settings .card.open>h2::after{content:"-"}
+#tab-settings .card:not(.open)>*:not(h2){display:none}
 </style>
 </head>
 <body>
@@ -215,7 +226,6 @@ html[data-theme=dark] .item.inactive{background:#1c2142}
 <main>
 
 <section id="tab-log">
- <div class="card today" id="todayCard"></div>
  <div class="card hide" id="urgentCard"></div>
  <div class="card">
   <h2 id="logTitle">Log a Visit or Call</h2>
@@ -239,14 +249,13 @@ html[data-theme=dark] .item.inactive{background:#1c2142}
   </div>
   <label>Notes (prayer needs, how they are doing)</label>
   <textarea id="vNotes"></textarea>
-  <label>Follow up needed?</label>
-  <select id="vFollow"><option value="No">No</option><option value="Yes">Yes</option></select>
+  <label class="tickline"><input type="checkbox" id="vFollow"> Follow up needed</label>
   <div id="followDateWrap" class="hide"><label>Follow up by</label><input type="date" id="vFollowDate"><div style="margin-top:6px"><button class="btn sm ghost" onclick="followIn(3)">In 3 days</button><button class="btn sm ghost" onclick="followIn(7)">In 1 week</button><button class="btn sm ghost" onclick="followIn(14)">In 2 weeks</button><button class="btn sm ghost" onclick="followIn(30)">In 1 month</button></div></div>
-  <label>Urgent need?</label>
-  <select id="vUrgent"><option value="No">No</option><option value="Yes">Yes, show it at the top until resolved</option></select>
+  <label class="tickline"><input type="checkbox" id="vUrgent"> Urgent need (shows at the top until resolved)</label>
   <button class="btn" onclick="saveVisit()">Save</button>
   <button class="btn ghost" onclick="resetVisitForm()">Clear</button>
  </div>
+ <div class="card today" id="todayCard"></div>
  <div class="card" id="careCard"></div>
  <div class="card hide" id="occCard"></div>
  <div class="card">
@@ -264,6 +273,7 @@ html[data-theme=dark] .item.inactive{background:#1c2142}
    <div><label>Member</label><select id="hMember"></select></div>
    <div><label>Search notes</label><input id="hSearch" placeholder="Type to search"></div>
   </div>
+  <div class="row"><div><label>Dates</label><select id="hRange"><option value="">All dates</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last 12 months</option></select></div></div>
   <div id="histList" style="margin-top:10px"></div>
  </div>
 </section>
@@ -275,7 +285,7 @@ html[data-theme=dark] .item.inactive{background:#1c2142}
   <button class="btn sm ghost" onclick="openBulkModal()">Add several names</button>
   <button class="btn sm ghost" onclick="$('importFile').click()">Import spreadsheet (CSV)</button>
   <input type="file" id="importFile" accept=".csv,text/csv" class="hide">
-  <div class="noprint" style="margin-top:10px"><button class="btn sm" id="mvActive" onclick="setMemView('active')">Active</button><button class="btn sm ghost" id="mvInactive" onclick="setMemView('inactive')">Inactive</button><button class="btn sm ghost" id="mvNon" onclick="setMemView('non')">Non-members</button><button class="btn sm ghost" id="mvReg" onclick="setMemView('reg')">Regular attenders</button><button class="btn sm ghost" id="mvout" onclick="setMemView('out')">Out of state</button><button class="btn sm ghost" id="mvshut" onclick="setMemView('shut')">Sick/Shut-in</button><button class="btn sm ghost" id="mvminor" onclick="setMemView('minor')">Minors</button><button class="btn sm ghost" id="mvsenior" onclick="setMemView('senior')">Seniors</button><button class="btn sm ghost" id="mvcollege" onclick="setMemView('college')">College students</button><button class="btn sm ghost" id="mvAll" onclick="setMemView('all')">All</button></div>
+  <div class="noprint" style="margin-top:10px"><button class="btn sm" id="mvActive" onclick="setMemView('active')">Active</button><button class="btn sm ghost" id="mvInactive" onclick="setMemView('inactive')">Inactive</button><button class="btn sm ghost" id="mvNon" onclick="setMemView('non')">Non-members</button><button class="btn sm ghost" id="mvReg" onclick="setMemView('reg')">Regular attenders</button><button class="btn sm ghost" id="mvAll" onclick="setMemView('all')">All</button></div>
   <p class="muted" id="mvHint" style="margin:6px 0 0"></p>
   <input id="mSearch" placeholder="Search names" style="margin-top:10px"><label>Group</label><select id="mGroup"></select>
   <div id="memList" style="margin-top:8px"></div>
@@ -285,25 +295,14 @@ html[data-theme=dark] .item.inactive{background:#1c2142}
 <section id="tab-reports" class="hide">
  <div class="card noprint">
   <h2>Report Filters</h2>
-  <div class="row3">
-   <div><label>From</label><input type="date" id="rFrom"></div>
-   <div><label>To</label><input type="date" id="rTo"></div>
-   <div><label>Type</label><select id="rType"></select></div>
-  </div>
-  <div class="row">
-   <div><label>Deacon</label><select id="rDeacon"></select></div>
-  </div>
-  <div class="row">
-   <div><label>Reason</label><select id="rReason"></select></div>
-   <div><label>Member group</label><select id="rGroup"></select></div>
-  </div>
+  <div class="row"><div><label>From</label><input type="date" id="rFrom"></div><div><label>To</label><input type="date" id="rTo"></div></div>
+  <div style="margin-top:6px"><button class="btn sm ghost" onclick="quickDates('this')">This month</button><button class="btn sm ghost" onclick="quickDates('last')">Last month</button><button class="btn sm ghost" onclick="quickDates('90')">Last 90 days</button></div>
+  <details style="margin-top:10px"><summary class="morelink">More filters</summary>
+   <div class="row"><div><label>Type</label><select id="rType"></select></div><div><label>Deacon</label><select id="rDeacon"></select></div></div>
+   <div class="row"><div><label>Reason</label><select id="rReason"></select></div><div><label>Member group</label><select id="rGroup"></select></div></div>
+  </details>
   <button class="btn" onclick="runReport()">Run Report</button>
-  <button class="btn alt" onclick="textReport()">Text Message</button>
-  <button class="btn alt" onclick="emailReport()">Email with Gmail</button>
-  <button class="btn alt" onclick="shareReport()">Share Report</button>
-  <button class="btn alt" onclick="printReport('reportOut','Visitation Report')">Print</button>
-  <button class="btn ghost" onclick="printReport('reportOut','Visitation Report',true)">Save Report File</button>
-  <button class="btn ghost" onclick="exportCSV()">Download CSV</button>
+  <button class="btn alt" onclick="sendSaveMenu()">Send or Save</button>
   <hr style="border:0;border-top:1px solid var(--line);margin-top:16px">
   <label>Monthly Deacon Report (one page for the board, with active prayer list)</label>
   <div class="row"><input type="month" id="rMonth"><div><button class="btn alt" style="margin-top:0" onclick="monthlyReport()">Build Monthly Report</button></div></div>
@@ -331,9 +330,7 @@ html[data-theme=dark] .item.inactive{background:#1c2142}
   <div class="noprint">
    <button class="btn sm alt" onclick="openMinistryModal()">+ Add ministry</button>
    <button class="btn sm alt" onclick="openLeaderModal()">+ Add leader</button>
-   <button class="btn sm ghost" onclick="openMinPaste()">Paste a list</button>
-   <button class="btn sm ghost" onclick="$('minImport').click()">Import spreadsheet (CSV)</button>
-   <button class="btn sm ghost" onclick="printReport('minList','Ministry Leaders')">Print</button>
+   <button class="btn sm ghost" onclick="minMore()">More</button>
    <input type="file" id="minImport" accept=".csv,text/csv" class="hide">
    <div style="margin-top:8px"><button class="btn sm" id="vMin" onclick="setMinView('ministry')">By ministry</button><button class="btn sm ghost" id="vLead" onclick="setMinView('leader')">By leader</button></div>
    <input id="minSearch" placeholder="Search ministries or leaders" style="margin-top:10px">
@@ -395,11 +392,6 @@ html[data-theme=dark] .item.inactive{background:#1c2142}
   <div id="supportAdmin" class="hide"><label>Support email (where problem reports go)</label><input id="sSupport" type="email" placeholder="name@example.com"><button class="btn alt" onclick="saveSupport()">Save</button></div>
  </div>
  <div class="card">
-  <h2>Reminders on the app icon</h2>
-  <p class="muted">The app shows a number on its Home Screen icon for urgent needs and follow ups that are due, whenever you open it. Press the button once on each phone to allow this. Some phones and browsers do not support it; the lists inside the app always work.</p>
-  <button class="btn alt" onclick="enableBadge()">Turn on icon number</button>
- </div>
- <div class="card">
   <h2>Your name and permissions</h2>
   <p class="muted">Only the person who entered a visit, and the administrator, can delete it. Enter your name the same way each time.</p>
   <label>Your name on this device</label>
@@ -429,7 +421,7 @@ html[data-theme=dark] .item.inactive{background:#1c2142}
 var LS='deaconVisits_v1', LSC='deaconVisits_cfg';
 var memView='active',noteOpen={},noteView='shared',pnKey=null,pnKeyUser='',pnPlain=[],pnLocked=[];
 var db={members:[],visits:[],prayers:[],deleted:[],users:[],log:[],leaders:[],ministries:[],notes:[],pnotes:[],links:[],settings:{support:'',lock:false,backupBin:'',lastBackup:'',ts:0}};
-var GROUPS=['Shut-in','Senior','Sick','Bereaved','New Member','Less than one year','Other'];
+var GROUPS=['Senior','Shut-in','Sick','Bereaved','College Student','Minor','Moved Away','New Member','Less than one year','Other'];
 var NEWG='Less than one year';
 function joinedRecent(m){
   if(!m||!m.joined)return false;
@@ -496,7 +488,8 @@ function unpackDb(o){
   return Promise.resolve(o);
 }
 function saveLocal(){try{localStorage.setItem(LS,JSON.stringify(db))}catch(e){}}
-function norm(){db.prayers=db.prayers||[];db.deleted=db.deleted||[];db.users=db.users||[];db.log=db.log||[];db.leaders=db.leaders||[];db.ministries=db.ministries||[];db.notes=db.notes||[];db.pnotes=db.pnotes||[];db.links=db.links||[];sett()}
+function migrateFlags(){var OLDFLAGS={shut:'Shut-in',senior:'Senior',minor:'Minor',college:'College Student',out:'Moved Away'};(db.members||[]).forEach(function(m){if(m.groups&&m.groups.indexOf('Out of state')>-1){m.groups=m.groups.map(function(g){return g==='Out of state'?'Moved Away':g}).filter(function(g,i,a){return a.indexOf(g)===i});m.ts=Date.now()}Object.keys(OLDFLAGS).forEach(function(k){if(m[k]){m.groups=m.groups||[];if(m.groups.indexOf(OLDFLAGS[k])<0)m.groups.push(OLDFLAGS[k]);delete m[k];m.ts=Date.now()}})})}
+function norm(){migrateFlags();db.prayers=db.prayers||[];db.deleted=db.deleted||[];db.users=db.users||[];db.log=db.log||[];db.leaders=db.leaders||[];db.ministries=db.ministries||[];db.notes=db.notes||[];db.pnotes=db.pnotes||[];db.links=db.links||[];sett()}
 function mergeList(a,b,dead){
   var map={};
   b.concat(a).forEach(function(x){
@@ -634,7 +627,7 @@ function sortedMembers(){return db.members.slice().sort(function(a,b){return a.n
 function isActive(m){return m.active!==false}
 function isNon(m){return !!m.nonmember}
 function isReg(m){return !!m.regular}
-var FLAGS=[['out','Out of state','Out of state'],['shut','Sick/Shut-in','Sick/Shut-in'],['minor','Minor','Minors'],['senior','Senior','Seniors'],['college','College Student','College students']];
+var FLAGS=[];
 function toggleFlag(id,k,on){var m=db.members.find(function(x){return x.id===id});if(!m)return;m[k]=!!on;m.ts=Date.now();logAct((on?'Ticked ':'Unticked ')+k,m.name);persist();renderAll()}
 function toggleReg(id,on){var m=db.members.find(function(x){return x.id===id});if(!m)return;m.regular=!!on;m.ts=Date.now();logAct(on?'Marked regular attender':'Unmarked regular attender',m.name);persist();renderAll()}
 function toggleNon(id,on){var m=db.members.find(function(x){return x.id===id});if(!m)return;m.nonmember=!!on;m.ts=Date.now();logAct(on?'Marked non-member':'Marked member',m.name);persist();renderAll()}
@@ -659,7 +652,7 @@ function openMemberModal(id){
      var n=$('mName').value.trim();
      if(!n){$('mName').style.borderColor='#b3261e';return false}
      if(id){m.name=n;m.phone=$('mPhone').value.trim();m.address=$('mAddr').value.trim();m.joined=$('mJoined').value;m.bday=mdGet('mBd');m.anniv=mdGet('mAn');m.notes=$('mNotes').value.trim();m.groups=getGroups();m.nonmember=$('mNon').checked;m.regular=$('mReg').checked;FLAGS.forEach(function(f){m[f[0]]=$('mF_'+f[0]).checked});m.ts=Date.now()}
-     else{var nm={nonmember:$('mNon').checked,regular:$('mReg').checked,out:$('mF_out').checked,shut:$('mF_shut').checked,minor:$('mF_minor').checked,senior:$('mF_senior').checked,college:$('mF_college').checked,id:uid(),name:n,phone:$('mPhone').value.trim(),address:$('mAddr').value.trim(),joined:$('mJoined').value,bday:mdGet('mBd'),anniv:mdGet('mAn'),notes:$('mNotes').value.trim(),groups:getGroups(),ts:Date.now()};db.members.push(nm);window._newMember=nm.id}
+     else{var nm={nonmember:$('mNon').checked,regular:$('mReg').checked,id:uid(),name:n,phone:$('mPhone').value.trim(),address:$('mAddr').value.trim(),joined:$('mJoined').value,bday:mdGet('mBd'),anniv:mdGet('mAn'),notes:$('mNotes').value.trim(),groups:getGroups(),ts:Date.now()};db.members.push(nm);window._newMember=nm.id}
      logAct(id?'Edited name':'Added name',n);
      var pp=persist();renderAll();
      if(!id){savedNote(pp,n)}
@@ -724,7 +717,7 @@ function renderMembers(){
   sortedMembers().filter(function(m){return m.name.toLowerCase().indexOf(q)>-1&&(!g||hasGroup(m,g))&&(memView==='all'||(FLAGS.some(function(f){return f[0]===memView})?!!m[memView]:memView==='reg'?isReg(m):memView==='non'?isNon(m):(!isNon(m)&&(memView==='active'?isActive(m):!isActive(m)))))}).forEach(function(m){
     var lc=lastContact(m.id);
     var dd=lc?daysSince(lc.date):null,pc=dd===null?'late':(dd<=30?'good':(dd<=60?'mid':'late')),pt=dd===null?'Not yet contacted':(dd<=0?'Contacted today':'Contacted '+dd+' day'+(dd===1?'':'s')+' ago');
-    h+='<div class="item'+(isActive(m)?'':' inactive')+'"><div class="mem"><div class="av">'+esc(initials(m.name))+'</div><div class="body"><div class="actbox"><label class="actchk"><input type="checkbox"'+(isActive(m)?' checked':'')+' onchange="toggleActive(\''+m.id+'\',this.checked)"> Active</label><label class="actchk"><input type="checkbox"'+(isNon(m)?' checked':'')+' onchange="toggleNon(\''+m.id+'\',this.checked)"> Non-member</label><label class="actchk"><input type="checkbox"'+(isReg(m)?' checked':'')+' onchange="toggleReg(\''+m.id+'\',this.checked)"> Regular attender (once a month)</label>'+FLAGS.map(function(f){return '<label class="actchk"><input type="checkbox"'+(m[f[0]]?' checked':'')+' onchange="toggleFlag(\''+m.id+'\',\''+f[0]+'\',this.checked)"> '+f[1]+'</label>'}).join('')+'</div><b>'+esc(m.name)+'</b>'+(isActive(m)?'':' <span class="pill late">Inactive</span>')+(isNon(m)?' <span class="pill mid">Non-member</span>':'')+(isReg(m)?' <span class="pill mid">Regular attender (once a month)</span>':'')+FLAGS.map(function(f){return m[f[0]]?' <span class="pill mid">'+f[1]+'</span>':''}).join('')+'<span class="pill '+pc+'">'+pt+'</span>'+
+    h+='<div class="item'+(isActive(m)?'':' inactive')+'"><div class="mem"><div class="av">'+esc(initials(m.name))+'</div><div class="body"><b>'+esc(m.name)+'</b>'+(isActive(m)?'':' <span class="pill late">Inactive</span>')+(isNon(m)?' <span class="pill mid">Non-member</span>':'')+FLAGS.map(function(f){return m[f[0]]?' <span class="pill mid">'+f[1]+'</span>':''}).join('')+'<span class="pill '+pc+'">'+pt+'</span>'+
       (effGroups(m).length?'<div>'+effGroups(m).map(function(x){return '<span class="gtag">'+esc(x)+'</span>'}).join('')+'</div>':'')+
       '<div class="muted">'+(m.phone?esc(m.phone)+'  ':'')+(m.address?esc(m.address):'')+'</div>'+
       (m.joined?'<div class="muted">Joined '+fmtDate(m.joined)+'</div>':'')+
@@ -732,6 +725,7 @@ function renderMembers(){
       (m.care?'<div><span class="pill urg" style="margin-left:0">'+esc(m.care.type)+'</span></div>':'')+
       (m.notes?'<div class="muted">'+esc(m.notes)+'</div>':'')+
       '<div class="muted">Last contact: '+(lc?esc(lc.type)+', '+fmtDate(lc.date):'none yet')+'</div>'+
+      '<div class="actbox"><label class="actchk"><input type="checkbox"'+(isActive(m)?' checked':'')+' onchange="toggleActive(\''+m.id+'\',this.checked)"> Active</label><label class="actchk"><input type="checkbox"'+(isNon(m)?' checked':'')+' onchange="toggleNon(\''+m.id+'\',this.checked)"> Non-member</label><label class="actchk"><input type="checkbox"'+(isReg(m)?' checked':'')+' onchange="toggleReg(\''+m.id+'\',this.checked)"> Regular attender (once a month)</label></div>'+
       '<div style="margin-top:6px">'+(isActive(m)?'<button class="btn sm" onclick="startVisitFor(\''+m.id+'\')">Log contact</button>':'')+contactLinks(m)+
       '<button class="btn sm ghost" onclick="openMemberModal(\''+m.id+'\')">Edit</button>'+
       '<button class="btn sm red" onclick="deleteMember(\''+m.id+'\')">Delete</button></div></div></div></div>';
@@ -810,7 +804,7 @@ function deacons(){var s={};db.visits.forEach(function(v){if(v.deacon)s[v.deacon
 function resetVisitForm(){
   $('visitId').value='';$('logTitle').textContent='Log a Visit or Call';
   $('vType').value='Phone Call';$('vDate').value=today();$('vTime').value=nowTime();
-  $('vLoc').value='';$('vNotes').value='';$('vReason').value=REASONS[0];$('vFollow').value='No';$('vFollowDate').value='';$('vUrgent').value='No';
+  $('vLoc').value='';$('vNotes').value='';$('vReason').value=REASONS[0];$('vFollow').checked=false;$('vFollowDate').value='';$('vUrgent').checked=false;
   $('followDateWrap').classList.add('hide');
   try{$('vDeacon').value=me||localStorage.getItem('deaconVisits_last')||''}catch(e){}
   updateLoc();
@@ -821,7 +815,7 @@ function updateLoc(){
   $('locLabel').textContent=t==='Hospital Visit'?'Hospital and room':t==='Home Visit'?'Address (optional)':'Location';
 }
 $('vType').onchange=updateLoc;
-$('vFollow').onchange=function(){var y=$('vFollow').value==='Yes';$('followDateWrap').classList.toggle('hide',!y);if(y&&!$('vFollowDate').value)followIn(7)};
+$('vFollow').onchange=function(){var y=$('vFollow').checked;$('followDateWrap').classList.toggle('hide',!y);if(y&&!$('vFollowDate').value)followIn(7)};
 function saveVisit(){
   if(!me){askMyName(saveVisit);return}
   if(!$('vMember').value){say('Name needed','Choose a member, or press Add a new name.');return}
@@ -829,7 +823,7 @@ function saveVisit(){
   var id=$('visitId').value;
   var rec={id:id||uid(),type:$('vType').value,memberId:$('vMember').value,date:$('vDate').value,time:$('vTime').value,
     deacon:$('vDeacon').value.trim(),reason:$('vReason').value,ts:Date.now(),enteredBy:me,location:($('vType').value==='Phone Call'||$('vType').value==='Card Sent')?'':$('vLoc').value.trim(),notes:$('vNotes').value.trim(),
-    follow:$('vFollow').value==='Yes',followDate:$('vFollowDate').value,urgent:$('vUrgent').value==='Yes',done:false};
+    follow:$('vFollow').checked,followDate:$('vFollowDate').value,urgent:$('vUrgent').checked,done:false};
   if(id){var i=db.visits.findIndex(function(v){return v.id===id});rec.done=db.visits[i].done;rec.enteredBy=owner(db.visits[i]);db.visits[i]=rec}
   else db.visits.push(rec);
   logAct(id?'Changed':'Added',rec.type+' for '+memName(rec.memberId));
@@ -843,7 +837,7 @@ function editVisit(id){
   $('visitId').value=v.id;$('logTitle').textContent='Edit Record';
   $('vType').value=v.type;$('vMember').value=v.memberId;$('vDate').value=v.date;$('vTime').value=v.time;
   $('vDeacon').value=v.deacon;$('vReason').value=v.reason||REASONS[0];$('vLoc').value=v.location||'';$('vNotes').value=v.notes||'';
-  $('vUrgent').value=v.urgent?'Yes':'No';$('vFollow').value=v.follow?'Yes':'No';$('vFollowDate').value=v.followDate||'';
+  $('vUrgent').checked=!!v.urgent;$('vFollow').checked=!!v.follow;$('vFollowDate').value=v.followDate||'';
   $('followDateWrap').classList.toggle('hide',!v.follow);updateLoc();window.scrollTo(0,0);
 }
 function deleteVisit(id){var vv=db.visits.find(function(x){return x.id===id});if(!vv||!canDelete(vv)){say('Not allowed','Only the person who entered this record, or the administrator, can delete it.');return}ask('Delete record','Delete this record? This cannot be undone.','Delete',function(){logAct('Deleted',vv.type+' for '+memName(vv.memberId));db.deleted.push(id);db.visits=db.visits.filter(function(v){return v.id!==id});persist();renderAll()})}
@@ -872,14 +866,25 @@ function renderFollow(){
   $('followList').innerHTML=l.map(function(v){return visitHtml(v,'<button class="btn sm" onclick="markDone(\''+v.id+'\')">Mark done</button><button class="btn sm ghost" onclick="editVisit(\''+v.id+'\')">Edit</button>',true)}).join('')||'<p class="muted">Nothing waiting.</p>';
 }
 function renderHistory(){
-  var t=$('hType').value,m=$('hMember').value,q=$('hSearch').value.toLowerCase();
-  var l=db.visits.filter(function(v){return (!t||v.type===t)&&(!m||v.memberId===m)&&(!q||((v.notes||'')+(v.deacon||'')+memName(v.memberId)).toLowerCase().indexOf(q)>-1)})
+  var t=$('hType').value,m=$('hMember').value,q=$('hSearch').value.toLowerCase(),rg=$('hRange').value,cut='';
+  if(rg){var cd=new Date();cd.setDate(cd.getDate()-Number(rg));cut=iso(cd)}
+  var l=db.visits.filter(function(v){return (!cut||v.date>=cut)&&(!t||v.type===t)&&(!m||v.memberId===m)&&(!q||((v.notes||'')+(v.deacon||'')+memName(v.memberId)).toLowerCase().indexOf(q)>-1)})
    .sort(function(a,b){return (b.date+b.time).localeCompare(a.date+a.time)});
+  var tot=l.length;l=l.slice(0,histLimit);
   $('histList').innerHTML=l.map(function(v){return visitHtml(v,'<button class="btn sm ghost" onclick="editVisit(\''+v.id+'\')">Edit</button>'+(canDelete(v)?'<button class="btn sm red" onclick="deleteVisit(\''+v.id+'\')">Delete</button>':''))}).join('')||'<p class="muted">No records found.</p>';
+  if(tot>histLimit)$('histList').innerHTML+='<p class="muted">Showing '+histLimit+' of '+tot+'.</p><button class="btn ghost" onclick="histLimit+=25;renderHistory()">Show more</button>';
 }
-['hType','hMember'].forEach(function(i){$(i).onchange=renderHistory});$('hSearch').oninput=renderHistory;
+var histLimit=25;
+['hType','hMember','hRange'].forEach(function(i){$(i).onchange=function(){histLimit=25;renderHistory()}});$('hSearch').oninput=function(){histLimit=25;renderHistory()};
 
 /* ---------- reports ---------- */
+function quickDates(k){var n=new Date(),f,t;if(k==='this'){f=new Date(n.getFullYear(),n.getMonth(),1);t=n}else if(k==='last'){f=new Date(n.getFullYear(),n.getMonth()-1,1);t=new Date(n.getFullYear(),n.getMonth(),0)}else{f=new Date();f.setDate(f.getDate()-90);t=n}$('rFrom').value=iso(f);$('rTo').value=iso(t);runReport()}
+function sendSaveMenu(){
+  var o=modal('Send or Save','<p class="muted">Run the report first, then choose how to send or keep it.</p>',[{text:'Close',cls:'ghost'}]);
+  var acts=o.querySelector('.acts');
+  [['Text Message','textReport()'],['Email with Gmail','emailReport()'],['Share Report','shareReport()'],['Print',"printReport('reportOut','Visitation Report')"],['Save Report File',"printReport('reportOut','Visitation Report',true)"],['Download CSV','exportCSV()']].reverse().forEach(function(x){
+    var el=document.createElement('button');el.className='btn alt';el.textContent=x[0];el.onclick=function(){o.remove();setTimeout(function(){new Function(x[1])()},150)};acts.insertBefore(el,acts.firstChild)});
+}
 function runReport(monthLabel){
   var f=$('rFrom').value,t=$('rTo').value,ty=$('rType').value,d=$('rDeacon').value,rs=$('rReason').value,gr=$('rGroup').value;
   var l=db.visits.filter(function(v){return (!f||v.date>=f)&&(!t||v.date<=t)&&(!ty||v.type===ty)&&(!d||v.deacon===d)&&(!rs||v.reason===rs)&&(!gr||inGroup(v.memberId,gr))})
@@ -942,7 +947,7 @@ function exportCSV(){
 
 /* ---------- v1.4.0 additions ---------- */
 function iso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
-function followIn(n){var d=new Date();d.setDate(d.getDate()+n);$('vFollowDate').value=iso(d);$('vFollow').value='Yes';$('followDateWrap').classList.remove('hide')}
+function followIn(n){var d=new Date();d.setDate(d.getDate()+n);$('vFollowDate').value=iso(d);$('vFollow').checked=true;$('followDateWrap').classList.remove('hide')}
 function memById(id){return db.members.find(function(x){return x.id===id})}
 function cleanTel(p){return String(p||'').replace(/[^0-9+]/g,'')}
 function contactLinks(m){
@@ -1273,6 +1278,11 @@ function leaderLinks(l){
   if(l.email)h+='<a class="btn sm ghost" href="mailto:'+esc(l.email)+'">Email</a>';
   return h;
 }
+document.addEventListener('click',function(e){var h=e.target.closest&&e.target.closest('#tab-settings .card>h2');if(h)h.parentNode.classList.toggle('open')});
+function minMore(){
+  var o=modal('More','<p class="muted">Add many at once, or print the list.</p>',[{text:'Close',cls:'ghost'}]);var acts=o.querySelector('.acts');
+  [['Paste a list',function(){openMinPaste()}],['Import spreadsheet (CSV)',function(){$('minImport').click()}],['Print',function(){printReport('minList','Ministry Leaders')}]].reverse().forEach(function(x){var el=document.createElement('button');el.className='btn alt';el.textContent=x[0];el.onclick=function(){o.remove();setTimeout(x[1],150)};acts.insertBefore(el,acts.firstChild)});
+}
 function setMinView(v){minView=v;renderMinistries()}
 $('minSearch').oninput=function(){renderMinistries()};
 function renderMinistries(){
@@ -1288,7 +1298,7 @@ function renderMinistries(){
       var ls=(m.leaders||[]).map(function(a){return {l:leaderById(a.id),role:a.role}}).filter(function(x){return x.l});
       return '<div class="item"><b>'+esc(m.name)+'</b>'+(m.description?'<div class="muted">'+esc(m.description)+'</div>':'')+
        (ls.length?ls.map(function(x){return '<div style="margin-top:6px"><b>'+esc(x.l.name)+'</b> <span class="muted">'+esc(x.role||x.l.title||'')+(x.l.phone?' | '+esc(x.l.phone):'')+'</span> '+leaderLinks(x.l)+'</div>'}).join(''):'<div class="muted">No leader assigned yet.</div>')+
-       '<div style="margin-top:6px" class="noprint"><button class="btn sm ghost" onclick="openMinistryModal(\''+m.id+'\')">Edit</button>'+(isAdmin()?'<button class="btn sm red" onclick="deleteMinistry(\''+m.id+'\')">Remove</button>':'')+'</div></div>';
+       '<div style="margin-top:6px" class="noprint"><button class="btn sm ghost" onclick="openMinistryModal(\''+m.id+'\')">Edit</button>'+(isAdmin()?'<button class="btn sm red" onclick="deleteMinistry(\''+m.id+'\')">Delete</button>':'')+'</div></div>';
     }).join('')||'<p class="muted">No ministries yet. Press Add ministry or import a spreadsheet.</p>';
   }else{
     var ls2=db.leaders.slice().sort(function(a,b){return a.name.localeCompare(b.name)}).filter(function(l){
@@ -1301,7 +1311,7 @@ function renderMinistries(){
        '<div class="muted">'+(l.phone?esc(l.phone)+'  ':'')+(l.email?esc(l.email):'')+'</div>'+
        (mm.length?'<div>'+mm.map(function(m){return '<span class="gtag">'+esc(m.name)+'</span>'}).join('')+'</div>':'<div class="muted">No ministry assigned yet.</div>')+
        (l.notes?'<div class="muted">'+esc(l.notes)+'</div>':'')+
-       '<div style="margin-top:6px" class="noprint">'+leaderLinks(l)+'<button class="btn sm ghost" onclick="openLeaderModal(\''+l.id+'\')">Edit</button>'+(isAdmin()?'<button class="btn sm red" onclick="deleteLeader(\''+l.id+'\')">Remove</button>':'')+'</div></div></div></div>';
+       '<div style="margin-top:6px" class="noprint">'+leaderLinks(l)+'<button class="btn sm ghost" onclick="openLeaderModal(\''+l.id+'\')">Edit</button>'+(isAdmin()?'<button class="btn sm red" onclick="deleteLeader(\''+l.id+'\')">Delete</button>':'')+'</div></div></div></div>';
     }).join('')||'<p class="muted">No leaders yet. Press Add leader or import a spreadsheet.</p>';
   }
   el.innerHTML=h;
@@ -1348,12 +1358,12 @@ function openLeaderModal(id){
 function deleteMinistry(id){
   if(!isAdmin()){say('Administrator only','Only the administrator can remove a ministry.');return}
   var m=db.ministries.filter(function(x){return x.id===id})[0];if(!m)return;
-  ask('Remove ministry','Remove '+m.name+'? The leaders stay on the list.','Remove',function(){logAct('Removed ministry',m.name);db.deleted.push(id);db.ministries=db.ministries.filter(function(x){return x.id!==id});persist();renderAll()});
+  ask('Delete ministry','Delete '+m.name+'? The leaders stay on the list.','Delete',function(){logAct('Removed ministry',m.name);db.deleted.push(id);db.ministries=db.ministries.filter(function(x){return x.id!==id});persist();renderAll()});
 }
 function deleteLeader(id){
   if(!isAdmin()){say('Administrator only','Only the administrator can remove a leader.');return}
   var l=leaderById(id);if(!l)return;
-  ask('Remove leader','Remove '+l.name+' from the leaders list and from every ministry?','Remove',function(){
+  ask('Delete leader','Delete '+l.name+' from the leaders list and from every ministry?','Delete',function(){
     logAct('Removed leader',l.name);
     db.ministries.forEach(function(m){if((m.leaders||[]).some(function(a){return a.id===id})){m.leaders=m.leaders.filter(function(a){return a.id!==id});m.ts=Date.now()}});
     db.deleted.push(id);db.leaders=db.leaders.filter(function(x){return x.id!==id});persist();renderAll();
@@ -1435,7 +1445,7 @@ function renderLinks(){
   var el=$('linksCard');if(!el)return;
   var l=DEFAULT_LINKS.concat(db.links.slice().sort(function(a,b){return a.title.localeCompare(b.title)}));
   el.innerHTML='<h2>Church apps and links</h2>'+l.map(function(x){
-    return '<div class="item"><a class="btn sm" target="_blank" rel="noopener" href="'+esc(x.url)+'">Open '+esc(x.title)+'</a>'+(isAdmin()&&!x.fixed?'<button class="btn sm ghost" onclick="openLinkModal(\''+x.id+'\')">Edit</button><button class="btn sm red" onclick="deleteLink(\''+x.id+'\')">Remove</button>':'')+'</div>';
+    return '<div class="item"><a class="btn sm" target="_blank" rel="noopener" href="'+esc(x.url)+'">Open '+esc(x.title)+'</a>'+(isAdmin()&&!x.fixed?'<button class="btn sm ghost" onclick="openLinkModal(\''+x.id+'\')">Edit</button><button class="btn sm red" onclick="deleteLink(\''+x.id+'\')">Delete</button>':'')+'</div>';
   }).join('')+(isAdmin()?'<button class="btn sm alt" style="margin-top:8px" onclick="openLinkModal()">+ Add a link</button>':'');
 }
 function openLinkModal(id){
@@ -1451,7 +1461,7 @@ function openLinkModal(id){
 }
 function deleteLink(id){
   var x=db.links.filter(function(k){return k.id===id})[0];if(!x)return;
-  ask('Remove link','Remove '+x.title+' from the list?','Remove',function(){logAct('Removed link',x.title);db.deleted.push(id);db.links=db.links.filter(function(k){return k.id!==id});persist();renderAll()});
+  ask('Delete link','Delete '+x.title+' from the list?','Delete',function(){logAct('Removed link',x.title);db.deleted.push(id);db.links=db.links.filter(function(k){return k.id!==id});persist();renderAll()});
 }
 
 /* ---------- start ---------- */
@@ -1482,12 +1492,12 @@ function renderPrayer(){
     return '<div class="item"><b>'+esc(memName(p.memberId))+'</b> <span class="muted">added '+fmtDate(p.added)+' | '+esc(p.status||'Active')+'</span><div>'+esc(p.request)+'</div>'+
      '<div style="margin-top:6px"><button class="btn sm" onclick="togglePrayer(\''+p.id+'\')">'+((p.status||'Active')==='Answered'?'Reopen':'Mark answered')+'</button>'+
      '<button class="btn sm ghost" onclick="openPrayerModal(\''+p.id+'\')">Edit</button>'+
-     '<button class="btn sm red" onclick="deletePrayer(\''+p.id+'\')">Remove</button></div></div>';
+     '<button class="btn sm red" onclick="deletePrayer(\''+p.id+'\')">Delete</button></div></div>';
   }).join('')||'<p class="muted">No requests to show.</p>';
 }
 $('pShow').onchange=renderPrayer;
 function togglePrayer(id){var p=db.prayers.find(function(x){return x.id===id});p.status=(p.status==='Answered')?'Active':'Answered';p.ts=Date.now();persist();renderPrayer()}
-function deletePrayer(id){ask('Remove request','Remove this prayer request?','Remove',function(){db.deleted.push(id);db.prayers=db.prayers.filter(function(p){return p.id!==id});persist();renderPrayer()})}
+function deletePrayer(id){ask('Delete request','Delete this prayer request? This cannot be undone.','Delete',function(){db.deleted.push(id);db.prayers=db.prayers.filter(function(p){return p.id!==id});persist();renderPrayer()})}
 function openPrayerModal(id){
   if(!db.members.length){say('Add a name first','Add at least one member on the Members tab.');return}
   var p=id?db.prayers.find(function(x){return x.id===id}):{memberId:'',request:'',status:'Active',added:today()};
@@ -1683,7 +1693,7 @@ function noteHtml1(n,withBtns){
   var priv=noteView==='private',can=priv||canDelete({enteredBy:n.author});
   return '<div class="item"><b>'+esc(fmtDate(n.date))+(n.title?' | '+esc(n.title):'')+'</b>'+(!priv&&n.author?' <span class="muted">by '+esc(n.author)+'</span>':'')+
    '<div class="noteText">'+esc(n.text)+'</div>'+
-   (withBtns&&can?'<div style="margin-top:6px"><button class="btn sm ghost" onclick="openNoteModal(\''+n.id+'\')">Edit</button><button class="btn sm red" onclick="deleteNote(\''+n.id+'\')">Remove</button></div>':'')+'</div>';
+   (withBtns&&can?'<div style="margin-top:6px"><button class="btn sm ghost" onclick="openNoteModal(\''+n.id+'\')">Edit</button><button class="btn sm red" onclick="deleteNote(\''+n.id+'\')">Delete</button></div>':'')+'</div>';
 }
 function groupNotes(list){
   var g={},order=[];
@@ -1743,7 +1753,7 @@ function openNoteModal(id){
 function deleteNote(id){
   var priv=noteView==='private';
   var n=noteSource().filter(function(x){return x.id===id})[0];if(!n)return;
-  ask('Remove note','Remove this note from '+fmtDate(n.date)+'?'+(priv?'':' This removes it for everyone.'),'Remove',function(){
+  ask('Delete note','Delete this note from '+fmtDate(n.date)+'?'+(priv?'':' This deletes it for everyone.'),'Delete',function(){
     db.deleted.push(id);
     if(priv){db.pnotes=db.pnotes.filter(function(x){return x.id!==id});persist();pnLoad();return}
     logAct('Removed note',n.title||n.date);db.notes=db.notes.filter(function(x){return x.id!==id});persist();renderAll();
